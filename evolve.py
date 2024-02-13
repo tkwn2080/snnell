@@ -1,35 +1,7 @@
-# This will define the variables for each generation
-# and the functions to evolve the population
-
 import numpy as np
 import copy
 
-# We will begin with randomly initialised variables
-# The set are: probe length, probe angle, angle of response (R), angle of response (L)
-
-# How long are the probes?
-length = None
-
-# At what angle are the probes set?
-probe_angle = None
-
-# What is the angle of response?
-response_angle = None
-
-# How far will the entity move per detection?
-distance = None
-
-# How fast will the entity move?
-speed = None
-
-weights = None
-
-genetic_code = [length, probe_angle, response_angle, distance, speed, weights]
-
 def spawn():
-    # This will create a new individual with random values
-    # genetic_code = [np.random.uniform(0, 1), np.random.uniform(0, 1), np.random.uniform (0,1), np.random.uniform(0, 1), np.random.uniform(0, 1)]
-    
     # self.prong_length = length
     # length = np.random.uniform(40, 100)
     length = 40
@@ -63,7 +35,9 @@ def spawn():
     parameters.append(learning_rate)
     parameters.append(eligibility_decay)
 
-    genetic_code = [length, probe_angle, response_angle, distance, speed, weights, architecture, depth, parameters]
+    weights, recurrence = add_recurrence(weights, architecture)
+
+    genetic_code = [length, probe_angle, response_angle, distance, speed, weights, architecture, depth, parameters, recurrence]
 
     return genetic_code
 
@@ -72,17 +46,15 @@ def random_architecture():
     output_layer = 3
     architecture = []
     architecture.append(input_layer)
-    hidden_depth = np.random.randint(2,8)
+    hidden_depth = np.random.randint(2,4)
     for i in range(hidden_depth):
-        hidden_breadth = np.random.randint(4,24)
+        hidden_breadth = np.random.randint(8,16)
         architecture.append(hidden_breadth)
     architecture.append(output_layer)
     print(architecture)
     total_depth = hidden_depth + 1
     return architecture, total_depth
     
-
-
 def initialise_weights(dimensions):
     print(dimensions)
     weights = {}
@@ -97,27 +69,37 @@ def initialise_weights(dimensions):
                 weights[f'l{i-1}-n{k}_l{i}-n{j}'] = layer_weights[j, k]
     return weights
 
+def add_recurrence(weights, dimensions):
+    recurrence = False
+    layer = None
+    for i, _ in enumerate(dimensions[1:-1]):
+        if not recurrence:
+            if np.random.uniform(0, 1) < 0.3:
+                recurrence = True
+                layer = i + 1
 
+                for n in range(dimensions[layer]):
+                    weight = np.random.uniform(0, 1)
+                    weights[f'l{layer}-n{n}_rec'] = weight
+                    print(f'Added recurrence weight {weight} to neuron {n} in layer {layer}')
+                break
+                
+    return weights, layer
 
 def init_population(size):
-    # This will create a population of size 'size'
     pop = []
     for i in range(size):
         pop.append(spawn())
     return pop
 
-
-
 def mutate(individual, mutation_rate):
     mutation_strength = 0.1
 
-    new_individual = copy.deepcopy(individual)  # Create a copy to mutate
+    new_individual = copy.deepcopy(individual) 
     for i in range(len(new_individual)-1):
         if np.random.uniform(0, 1) < mutation_rate:
-            # Apply a mutation around the parent's value within a certain range defined by mutation_strength
             mutation = np.random.uniform(-mutation_strength, mutation_strength)
             new_individual[i] += mutation
-            # Ensure the new value is within the allowed range (0, 1)
             new_individual[i] = min(max(new_individual[i], 0), 1)
     
     # For now, just pass through without mutation
@@ -139,8 +121,6 @@ def asexual_reproduction(parent, mutation_rate):
     return child1, child2, child3, child4
 
 def sexual_reproduction(mother, father):
-
-    # Create children by choosing attributes from either mother or father for the first five indices
     child1 = [np.random.choice([mother[i], father[i]]) for i in range(5)]
     child2 = [np.random.choice([mother[i], father[i]]) for i in range(5)]
     child3 = [np.random.choice([mother[i], father[i]]) for i in range(5)]
@@ -148,7 +128,6 @@ def sexual_reproduction(mother, father):
 
     # print(child1, child2, child3, child4)
 
-    # Append the weights reproduction separately to ensure it is placed at the 6th index
     # child1.append(weights_reproduction(mother, father))
     # child2.append(weights_reproduction(mother, father))
     # child3.append(weights_reproduction(mother, father))
@@ -168,12 +147,14 @@ def reproduction(mother, father, mutation_rate):
             mutated_child.append(mother[6])
             mutated_child.append(mother[7])
             mutated_child.append(mother[8])
+            mutated_child.append(mother[9])
         else:
             mutated_weights = weights_mutation(father[5])
             mutated_child.append(mutated_weights)
             mutated_child.append(father[6])
             mutated_child.append(father[7])
             mutated_child.append(father[8])
+            mutated_child.append(father[9])
         
         mutated_progeny.append(mutated_child)
     return mutated_progeny

@@ -163,7 +163,7 @@ def run_simulation(genotype, screen, clock, current_trial, total_trials, current
             
             # Punish the entity for not finding the emitter in time
             if olfactory_entity.particle_count != 0:
-                punishment = (100 * calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y)) / olfactory_entity.particle_count
+                punishment = (100 * calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y)) / (olfactory_entity.particle_count / 2)
             else:
                 punishment = 100 * calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y)
             reward_signal -= punishment
@@ -185,7 +185,7 @@ def run_simulation(genotype, screen, clock, current_trial, total_trials, current
             
             # Punish the entity for going out of bounds
             if olfactory_entity.particle_count != 0:
-                punishment = (100 * calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y)) / olfactory_entity.particle_count
+                punishment = (100 * calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y)) / (olfactory_entity.particle_count / 2)
             else:
                 punishment = 100 * calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y)
             reward_signal -= punishment
@@ -260,7 +260,7 @@ def run_simulation(genotype, screen, clock, current_trial, total_trials, current
 
                 # Punish the entity for getting lost
                 if olfactory_entity.particle_count != 0:
-                    punishment = (100 * calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y)) / olfactory_entity.particle_count
+                    punishment = (100 * calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y)) / (olfactory_entity.particle_count / 2)
                 else:
                     punishment = 100 * calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y)
                 reward_signal -= punishment
@@ -334,18 +334,21 @@ def run_simulation(genotype, screen, clock, current_trial, total_trials, current
         architecture_text = f"Architecture: {architecture}"
         learning_rate_text = f"Learning Rate: {parameters[0]}"
         decay_rate_text = f"Eligibility Decay: {parameters[1]}"
+        recurrent_layer_text = f"Recurrent Layer: {recurrence}"
         trial_surface = font.render(trial_text, True, (255, 255, 255))
         candidate_surface = font.render(candidate_text, True, (255, 255, 255))
         epoch_surface = font.render(epoch_text, True, (255, 255, 255))
         architecture_surface = font.render(architecture_text, True, (255, 255, 255))
         learning_rate_surface = font.render(learning_rate_text, True, (255, 255, 255))
         decay_rate_surface = font.render(decay_rate_text, True, (255, 255, 255))
-        screen.blit(trial_surface, (10, screen.get_height() - 150))
-        screen.blit(candidate_surface, (10, screen.get_height() - 120))
-        screen.blit(epoch_surface, (10, screen.get_height() - 90))
-        screen.blit(architecture_surface, (10, screen.get_height() - 60))
-        screen.blit(learning_rate_surface, (10, screen.get_height() - 30))
-        screen.blit(decay_rate_surface, (10, screen.get_height()))
+        recurrent_layer_surface = font.render(recurrent_layer_text, True, (255, 255, 255))
+        screen.blit(trial_surface, (10, screen.get_height() - 210))
+        screen.blit(candidate_surface, (10, screen.get_height() - 180))
+        screen.blit(epoch_surface, (10, screen.get_height() - 150))
+        screen.blit(architecture_surface, (10, screen.get_height() - 120))
+        screen.blit(learning_rate_surface, (10, screen.get_height() - 90))
+        screen.blit(decay_rate_surface, (10, screen.get_height() - 60))
+        screen.blit(recurrent_layer_surface, (10, screen.get_height() - 30))
 
         pygame.display.flip()
         clock.tick(120)  # Limit to 60 frames per second
@@ -385,7 +388,7 @@ def calculate_fitness(simulation_data, time_limit=60000):
         if particle_count == 0:
             return time_limit
         if particle_count > 0:
-            return simulation_time / particle_count
+            return simulation_time / (particle_count / 2)
     else:
         # If the entity did not collide, calculate the final distance from the emitter
         final_x, final_y = simulation_data['final_position']
@@ -396,7 +399,7 @@ def calculate_fitness(simulation_data, time_limit=60000):
         if particle_count == 0:
             return time_limit + final_distance
         if particle_count > 0:
-            return (time_limit + final_distance) / particle_count
+            return (time_limit + final_distance) / (particle_count / 2)
 
 
 num_epochs = 2  # Set the number of epochs for the evolution process
@@ -443,19 +446,10 @@ for epoch in range(num_epochs):
         architecture = individual[6]
         depth = individual[7]
         parameters = individual[8]
+        recurrence = individual[9]
 
+        network = Network(architecture, depth, parameters, recurrence)
 
-        network = Network(architecture, depth, parameters)
-
-
-        # network = Network([
-        #     Layer(0, 4, layer_type='input'),
-        #     Layer(1, 16, layer_type='hidden'),
-        #     Layer(2, 16, layer_type='hidden'),
-        #     Layer(3, 16, layer_type='hidden'),
-        #     Layer(4, 8, layer_type='hidden'),
-        #     Layer(5, 3, layer_type='output')
-        #     ])
 
         network.construct(weights, parameters)
 

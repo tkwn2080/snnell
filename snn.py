@@ -1,6 +1,7 @@
 import random
 import numpy as np
 import time
+import math
 
 class Neuron:
     def __init__(self, id, neuron_type):
@@ -32,7 +33,7 @@ class Neuron:
         self.e_decay = 0.99
 
         # REFRACTORY
-        self.refractory_period = 5
+        self.refractory_period = 10
         self.refractory_counter = 0
 
         # ACTIVITY
@@ -54,17 +55,13 @@ class Neuron:
         self.connections.append(other_neuron)
 
     def receive_spike(self, spike, source):
-        # if self.refractory_counter > 0:
-        #     # TODO DETERMINE HOW TO HANDLE REFRACTORY PERIOD
-        #     self.membrane_potential += spike * self.weights[source] * self.m_decay
-        #     self.eligibility[source] += spike * self.weights[source] * self.m_decay
-        # else:
-        #     self.membrane_potential += spike * self.weights[source]
-        #     self.eligibility[source] += spike * self.weights[source]
-
         if self.refractory_counter == 0:
             self.membrane_potential += spike * self.weights[source]
             self.eligibility[source] += spike * self.weights[source]
+        elif self.refractory_counter > 0:
+            discount_factor = 1 - (self.refractory_counter / 10)
+            self.membrane_potential += discount_factor * spike * self.weights[source]
+            self.eligibility[source] += discount_factor * spike * self.weights[source] 
 
         self.last_received[source] = time.time()
 
@@ -80,6 +77,7 @@ class Neuron:
                 weight_change = -self.learning_rate * np.exp(-abs(time_difference) / self.ltd_rate)
 
             self.weights[key] += weight_change
+            self.weights[key] = np.clip(self.weights[key], -1, 1)  
 
     def send_spike(self):
         if self.neuron_type == 'output':
@@ -132,6 +130,7 @@ class Neuron:
             # Apply the weight update
             if global_signal != 0:
                 self.weights[source] += weight_update
+                self.weights[source] = np.clip(self.weights[source], -1, 1)
             
             # self.print_counter += 1
             
@@ -162,14 +161,22 @@ class Neuron:
 
 
 class Layer:
-    def __init__(self, index, size, layer_type):
+    def __init__(self, index, size, layer_type, layer_variant):
         self.neurons = []
         self.index = index
         self.layer_type = layer_type
+        if layer_variant == None:
+            self.layer_variant = 'forward'
+        else:
+            self.layer_variant = layer_variant
 
         for i in range(size):
             neuron_type = self.determine_neuron_type()  # Determine the neuron type based on layer type
             self.neurons.append(Neuron(f'l{index}-n{i}', neuron_type))
+
+            if self.layer_variant == 'recurrent':
+                self.connect_recurrent()
+    
 
     def determine_neuron_type(self):
         if self.layer_type == 'input':
@@ -184,6 +191,10 @@ class Layer:
             for j in range(len(next_layer.neurons)):
                 self.neurons[i].connect_to(next_layer.neurons[j])
 
+    def connect_recurrent(self):
+        for i in range(len(self.neurons)):
+            self.neurons[i].connect_to(self.neurons[i])
+
     def initialise_weights(self, network):
         if self.index == 1:  # Skip the first layer as it has no previous layer
             return
@@ -197,14 +208,13 @@ class Layer:
                 weights[prev_neuron.id] = random.random()
             neuron.set_weights(weights)
 
-        
-
-
 class Network:
-    def __init__(self, architecture, depth, parameters):
+    def __init__(self, architecture, depth, parameters, recurrence):
         self.layers = []
         # Store references to the layers by their index for easy access
         self.layer_dict = {}
+
+        self.recurrent_layer = recurrence
 
         self.global_signal = 0
         self.signal_decay = 0.6
@@ -218,29 +228,25 @@ class Network:
         self.learning_rate = parameters[0]
         self.eligibility_decay = parameters[1]
 
-        # Determine the types of layers based on their position in the network
         layer_types = ['input'] + ['hidden'] * (depth - 1) + ['output']
 
-        # Create layers based on the provided dimensions and depth
         for i, size in enumerate(architecture):
+            if self.recurrent_layer == i:
+                layer_variant = 'recurrent'
+            else:
+                layer_variant = None
             layer_type = layer_types[min(i, len(layer_types) - 1)]
-            layer = Layer(i, size, layer_type)  # Use i instead of i + 1
+            layer = Layer(i, size, layer_type, layer_variant)  # Use i instead of i + 1
             self.layers.append(layer)
             self.layer_dict[layer.index] = layer
 
-        # Connect all layers from the first to the last
         for i in range(len(self.layers) - 1):
             self.layers[i].connect_to(self.layers[i + 1])
 
-
-
-
-
-
     def construct(self, weights, parameters):
         # Connect all layers from the first to the last
-        for i in range(len(self.layers) - 1):  # Adjusted to iterate from the first layer
-            self.layers[i].connect_to(self.layers[i + 1])  # Adjusted to connect forward
+        for i in range(len(self.layers) - 1):  
+            self.layers[i].connect_to(self.layers[i + 1]) 
         
         self.learning_rate = parameters[0]
         self.eligibility_decay = parameters[1]
@@ -248,54 +254,68 @@ class Network:
         self.set_weights(weights, self.learning_rate, self.eligibility_decay)
 
     def set_weights(self, weights, learning_rate, eligibility_decay):
-        # Group weights by target neuron
         grouped_weights = {}
         for key, value in weights.items():
-            source_id, target_id = key.split('_')
+            if '_rec' in key:
+                source_id = target_id = key.split('_rec')[0]
+            else:
+                source_id, target_id = key.split('_')
+
             if target_id not in grouped_weights:
                 grouped_weights[target_id] = {}
             grouped_weights[target_id][source_id] = value
 
-        # Set weights for each target neuron
         for target_id, weights in grouped_weights.items():
             target_layer_index, target_neuron_index = map(int, target_id[1:].split('-n'))
             target_neuron = self.layer_dict[target_layer_index].neurons[target_neuron_index]
             target_neuron.set_weights(weights)
-            # print(target_neuron.weights)
             target_neuron.learning_rate = learning_rate
             target_neuron.eligibility_decay = eligibility_decay
-            # print(target_neuron.learning_rate)
+
+    def set_recurrence(self, weights):
+        for key, value in weights.items():
+            if '_rec' in key:
+                source_id, target_id = key.split('_')[0].split('-')
+                source_layer_index, source_neuron_index = map(int, source_id[1:].split('-n'))
+                target_layer_index, target_neuron_index = map(int, target_id[1:].split('-n'))
+                source_neuron = self.layer_dict[source_layer_index].neurons[source_neuron_index]
+                target_neuron = self.layer_dict[target_layer_index].neurons[target_neuron_index]
+                source_neuron.connect_to(target_neuron)
+                source_neuron.weights[target_id] = value
 
     def get_layer(self, index):
         # Retrieve a layer by its index
         return self.layer_dict.get(index)
     
+    def network_decay(self):
+        self.frequency_counter *= self.signal_decay
+        self.global_signal *= self.signal_decay
+        self.absence_counter *= self.absence_decay
+    
     def propagate_spike(self, spikes, count):
+        self.network_decay()
+
         for i, spike in enumerate(spikes):
             input_neuron = self.get_layer(0).neurons[i]
             if spike == 1:
                 input_neuron.input_spike(1)
-                self.frequency_counter += 1
-                self.absence_counter -= 1
+                self.frequency_counter += 0.5
+                self.absence_counter -= 0.5
 
-                reward = count * self.frequency_counter
+                reward = count * math.exp(self.frequency_counter)
+                # print(count, self.frequency_counter, reward, self.global_signal)
                 self.global_signal += reward / 1000
             elif spike == 0:
                 input_neuron = self.get_layer(0).neurons[i+4]
                 input_neuron.input_spike(0.2)
-                self.absence_counter += 1
+                self.absence_counter += 0.5
                 self.global_signal -= self.absence_counter / 1000
+        
         for layer in self.layers:
             for neuron in layer.neurons:
                 neuron.update(self.global_signal, self.absence_counter)
-        output = self.get_outputs()
-
         
-        self.frequency_counter *= self.signal_decay
-
-        self.global_signal *= self.signal_decay
-        self.absence_counter *= self.absence_decay
-
+        output = self.get_outputs()
         return output
 
     def get_outputs(self):
@@ -315,6 +335,7 @@ class Network:
             self.print_counter += 1
 
         # ACTIONS BY MEMBRANE POTENTIAL INSTEAD OF SPIKES
+        
         # if spiked == False:
         #     for neuron in self.get_layer(last_layer_index).neurons:
         #         output[int(neuron.id[-1])] = neuron.membrane_potential
@@ -324,23 +345,20 @@ class Network:
         #     self.print_counter += 1
         #     max_potential = max(output)
         #     output = [1 if potential == max_potential else 0 for potential in output]
-        return output
         
-            
+        return output
+             
     def modify_learning(self, reward_signal):
         self.global_signal += reward_signal
-        # print(self.global_signal)
 
     def update_signal(self):
         self.global_signal *= self.signal_decay
-        # print(self.global_signal)
     
     def reset_membranes(self):
         for layer in self.layers:
             for neuron in layer.neurons:
                 neuron.membrane_potential = 0
                 neuron.refractory_counter = 0
-
 
     def retrieve_weights(self):
         weights = {}

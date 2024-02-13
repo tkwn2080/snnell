@@ -2,10 +2,6 @@ import numpy as np
 import pygame
 from snn import Network
 
-
-
-
-
 class OlfactoryEntity:
         def __init__(self, x, y, length, probe_angle, response_angle, distance, speed, network):
             self.x = x
@@ -146,7 +142,6 @@ class OlfactoryEntity:
             return distance_to_particle <= (particle_radius + self.prong_thickness / 2)
 
         def move_response(self, distance, angle):
-            # Updates the entity's position based on the distance and angle of movement
             self.x += np.cos(self.angle + angle) * distance
             self.y += np.sin(self.angle + angle) * distance
 
@@ -197,6 +192,6 @@ class OlfactoryEntity:
                         self.particle_count += 1
 
 
-            print(self.spikes)
+            # print(self.spikes)
             output = Network.propagate_spike(self.network, self.spikes, self.particle_count)
             self.interpret_output(output)
