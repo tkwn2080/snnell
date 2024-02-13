@@ -103,7 +103,7 @@ class Neuron:
 
     def intrinsic_activity(self):
         if self.refractory_counter == 0:
-            print(self.base_activity)
+            # print(self.base_activity)
             if np.random.uniform(0, 1) < self.base_activity / 100:
                 self.membrane_potential += np.random.normal(0.1, 1)
 
@@ -271,31 +271,27 @@ class Network:
         return self.layer_dict.get(index)
     
     def propagate_spike(self, spikes, count):
-        for i in spikes:
+        for i, spike in enumerate(spikes):
             input_neuron = self.get_layer(0).neurons[i]
-            if spikes[i] == 1:
+            if spike == 1:
                 input_neuron.input_spike(1)
                 self.frequency_counter += 1
                 self.absence_counter -= 1
 
-                if count <= 9:
-                    reward = (0.5 * (count + 1)) * ((self.frequency_counter + 2) / 2)
-                else:
-                    reward = (0.05 * (count + 10)) * ((self.frequency_counter + 2) / 2)
-                self.global_signal += max(reward, 0)
-            else:
-                input_neuron = self.get_layer(0).neurons[i+2]
-                input_neuron.input_spike(1)
+                reward = count * self.frequency_counter
+                self.global_signal += reward / 1000
+            elif spike == 0:
+                input_neuron = self.get_layer(0).neurons[i+4]
+                input_neuron.input_spike(0.2)
                 self.absence_counter += 1
                 self.global_signal -= self.absence_counter / 1000
-                # print(self.absence_counter)
         for layer in self.layers:
             for neuron in layer.neurons:
                 neuron.update(self.global_signal, self.absence_counter)
         output = self.get_outputs()
 
-        if self.frequency_counter > 0.5:
-            self.frequency_counter *= self.signal_decay
+        
+        self.frequency_counter *= self.signal_decay
 
         self.global_signal *= self.signal_decay
         self.absence_counter *= self.absence_decay
@@ -314,7 +310,7 @@ class Network:
                 spiked = True
         if spiked == True:
             if self.print_counter > 50:
-                print(f'Action potentials: {output}')
+                # print(f'Action potentials: {output}')
                 self.print_counter = 0
             self.print_counter += 1
 

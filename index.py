@@ -154,6 +154,8 @@ def run_simulation(genotype, screen, clock, current_trial, total_trials, current
     olfactory_entity = OlfactoryEntity(100, 400, length, probe_angle, response_angle, distance, speed, network)
     entity_start_time = 2000
 
+    first_draw = True
+
     # Simulation loop for the current genotype
     while True:
         current_time = pygame.time.get_ticks()
@@ -254,7 +256,7 @@ def run_simulation(genotype, screen, clock, current_trial, total_trials, current
         opening_countdown += 1
 
         if opening_countdown > 600:
-            if olfactory_entity.timesteps_since_touch > 600:
+            if olfactory_entity.timesteps_since_touch > 1200:
 
                 # Punish the entity for getting lost
                 if olfactory_entity.particle_count != 0:
@@ -312,7 +314,11 @@ def run_simulation(genotype, screen, clock, current_trial, total_trials, current
         red_particles = temp_red_particles  # Replace the original deque with the updated one
 
         # Update and draw the olfactory tracking entity
+
         if current_time - simulation_start_time > entity_start_time:
+            if first_draw == True:
+                olfactory_entity.draw(screen)
+                first_draw = False
             olfactory_entity.update(list(red_particles))  # Pass a list of red_particles for sensing
             olfactory_entity.draw(screen)
 
@@ -320,17 +326,26 @@ def run_simulation(genotype, screen, clock, current_trial, total_trials, current
             Network.modify_learning(network, reward_signal)
             reward_signal = 0
 
-        # Display trial, candidate number, and epoch number
+        # Display trial, candidate number, epoch number, architecture, learning rate, and decay rate
         font = pygame.font.Font(None, 36)
         trial_text = f"Trial: {current_trial}/{total_trials}"
         candidate_text = f"Candidate: {current_candidate}/{total_candidates}"
         epoch_text = f"Epoch: {current_epoch}/{num_epochs}"
+        architecture_text = f"Architecture: {architecture}"
+        learning_rate_text = f"Learning Rate: {parameters[0]}"
+        decay_rate_text = f"Eligibility Decay: {parameters[1]}"
         trial_surface = font.render(trial_text, True, (255, 255, 255))
         candidate_surface = font.render(candidate_text, True, (255, 255, 255))
         epoch_surface = font.render(epoch_text, True, (255, 255, 255))
-        screen.blit(trial_surface, (10, screen.get_height() - 90))
-        screen.blit(candidate_surface, (10, screen.get_height() - 60))
-        screen.blit(epoch_surface, (10, screen.get_height() - 30))
+        architecture_surface = font.render(architecture_text, True, (255, 255, 255))
+        learning_rate_surface = font.render(learning_rate_text, True, (255, 255, 255))
+        decay_rate_surface = font.render(decay_rate_text, True, (255, 255, 255))
+        screen.blit(trial_surface, (10, screen.get_height() - 150))
+        screen.blit(candidate_surface, (10, screen.get_height() - 120))
+        screen.blit(epoch_surface, (10, screen.get_height() - 90))
+        screen.blit(architecture_surface, (10, screen.get_height() - 60))
+        screen.blit(learning_rate_surface, (10, screen.get_height() - 30))
+        screen.blit(decay_rate_surface, (10, screen.get_height()))
 
         pygame.display.flip()
         clock.tick(120)  # Limit to 60 frames per second

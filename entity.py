@@ -28,6 +28,7 @@ class OlfactoryEntity:
             self.R2_prong_y = None
 
             self.prongs = [[self.L1_prong_x, self.L1_prong_y,], [self.R1_prong_x, self.R1_prong_y], [self.L2_prong_x, self.L2_prong_y], [self.R2_prong_x, self.R2_prong_y]]
+            self.update_prong_positions()
 
             self.spikes = [0,0,0,0]
             
@@ -47,6 +48,24 @@ class OlfactoryEntity:
 
             self.network = network
             
+        def update_prong_positions(self):
+            # Calculate and update the positions of all prongs based on the current entity position and angle
+            self.L1_prong_x = self.x + np.cos(self.angle + self.prong_angle) * self.prong_length
+            self.L1_prong_y = self.y + np.sin(self.angle + self.prong_angle) * self.prong_length
+            self.R1_prong_x = self.x + np.cos(self.angle - self.prong_angle) * self.prong_length
+            self.R1_prong_y = self.y + np.sin(self.angle - self.prong_angle) * self.prong_length
+
+            recessed_x1 = self.x - np.cos(self.angle) * self.size * 0.75
+            recessed_y1 = self.y - np.sin(self.angle) * self.size * 0.75
+
+            self.L2_prong_x = recessed_x1 + np.cos(self.angle + self.prong_angle) * self.prong_length
+            self.L2_prong_y = recessed_y1 + np.sin(self.angle + self.prong_angle) * self.prong_length
+            self.R2_prong_x = recessed_x1 + np.cos(self.angle - self.prong_angle) * self.prong_length
+            self.R2_prong_y = recessed_y1 + np.sin(self.angle - self.prong_angle) * self.prong_length
+
+            # Update prongs list
+            self.prongs = [[self.L1_prong_x, self.L1_prong_y], [self.R1_prong_x, self.R1_prong_y],
+                        [self.L2_prong_x, self.L2_prong_y], [self.R2_prong_x, self.R2_prong_y]]
 
         def draw(self, screen):
 
@@ -91,13 +110,18 @@ class OlfactoryEntity:
             # TAIL
             wiggle_effect = np.sin(self.wiggle_phase) * self.tail_wiggle_angle
             tail_angle = self.angle + wiggle_effect
-            tail_length = self.size
-            tail_width = 2  
+            tail_length = self.size * 2
+            tail_width = 3  
             tail_x = recessed_x2 - np.cos(tail_angle) * tail_length
             tail_y = recessed_y2 - np.sin(tail_angle) * tail_length
             pygame.draw.line(screen, (0, 255, 0), (recessed_x2, recessed_y2), (tail_x, tail_y), tail_width)
 
         def check_prong_collision(self, particle, prong_x, prong_y):
+
+            if prong_x is None or prong_y is None:
+                print("Prong position is None, skipping collision check")  # Temporary debugging aid
+                return False
+
             prong_end_pos = np.array([prong_x, prong_y])
             entity_pos = np.array([self.x, self.y])
             particle_pos = np.array(particle[:2])  # Assuming particle format is [x, y, vx, vy]
@@ -161,68 +185,18 @@ class OlfactoryEntity:
                 self.right_turn(self.response_angle, self.movement_counter)
                 self.wiggle_phase += self.tail_wiggle_speed
 
-        def handle_spikes(self, left_spike, right_spike):
-            if left_spike and right_spike:
-                spike = [1,1]
-                self.particle_count += 2
-            elif left_spike:
-                spike = [1,0]
-                self.particle_count +=1
-            elif right_spike:
-                spike = [0,1]
-                self.particle_count += 1
-            else:
-                spike = [0,0]
-            return spike    
-
         def update(self, red_particles):
-            # Initialize spike indicators for this frame
-
-            # Network.update_signal(self.network)
+            
+            self.spikes = [0,0,0,0]
 
             for particle in red_particles:
-                self.spikes = [0,0,0,0]
                 
-                for i in range(self.prongs):
-                    if self.check_prong_collision(particle, self.prongs[i][0], self.prongs[i][1]):
+                for i, prong in enumerate(self.prongs):
+                    if self.check_prong_collision(particle, prong[0], prong[1]):
                         self.spikes[i] = 1
                         self.particle_count += 1
 
 
-            
-
-
-
-            # # Handle movement based on counters for smooth transitions
-            # if self.left_counter > 0 or self.right_counter > 0:
-            #     # Calculate the difference and the sum of the counters
-            #     counter_difference = self.left_counter - self.right_counter
-            #     counter_sum = self.left_counter + self.right_counter
-                
-            #     # Normalize the sensitivity to the range [0, 1]
-            #     normalized_sensitivity = max(0, min(self.sensitivity, 1))
-                
-            #     # Apply the normalized sensitivity to the counter difference
-            #     adjusted_difference = counter_difference * normalized_sensitivity
-                
-            #     # Determine the direction and magnitude of the turn based on the adjusted counter difference
-            #     turn_direction = -np.sign(adjusted_difference)  # Negative for left turn, positive for right turn
-            #     turn_magnitude = abs(adjusted_difference) / counter_sum if counter_sum != 0 else 0
-                
-            #     # Move straight if counters are equal, otherwise turn proportionally to the imbalance
-            #     if adjusted_difference == 0:
-            #         self.move_response(self.speed, 0)  # Move straight
-            #     else:
-            #         self.move_response(self.speed, turn_direction * self.response_angle * turn_magnitude)
-                
-            #     # Decrease both counters
-            #     self.left_counter = max(self.left_counter - 1, 0)
-            #     self.right_counter = max(self.right_counter - 1, 0)
-
-            #     # Increment the wiggle phase
-            #     self.wiggle_phase += self.tail_wiggle_speed
-
-            # Handle spikes
-            spikes = self.handle_spikes (left_spike, right_spike)
-            output = Network.propagate_spike(self.network, spikes, self.particle_count)
+            print(self.spikes)
+            output = Network.propagate_spike(self.network, self.spikes, self.particle_count)
             self.interpret_output(output)

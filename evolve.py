@@ -54,7 +54,7 @@ def spawn():
 
     weights = initialise_weights(architecture)
 
-    learning_rate = np.random.uniform(0.01, 2) / 10000
+    learning_rate = np.random.uniform(0.1, 2) / 10000
 
     eligibility_decay = np.random.uniform(0.1,0.99)
 
@@ -68,7 +68,7 @@ def spawn():
     return genetic_code
 
 def random_architecture():
-    input_layer = 4
+    input_layer = 8
     output_layer = 3
     architecture = []
     architecture.append(input_layer)
@@ -85,14 +85,6 @@ def random_architecture():
 
 def initialise_weights(dimensions):
     print(dimensions)
-    # This will take the network dimensions and create a set of randomised weights
-    # They will be stored as addressible weights corresponding to each connection
-    # They will be slotted in to the model at the start of each candidate trial
-    # The dimensions will be: 4, 5, 3
-    # It will be a dense network
-    # The weights will be stored in a list of lists
-    # They will be initialised between 0 and 1
-
     weights = {}
     for i in range(1, len(dimensions)):
         fan_in = dimensions[i - 1]
