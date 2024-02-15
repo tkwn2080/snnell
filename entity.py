@@ -140,6 +140,34 @@ class OlfactoryEntity:
             # Collision detected if the distance is less than the sum of the radii
             particle_radius = 2  # Assuming particle radius is 2
             return distance_to_particle <= (particle_radius + self.prong_thickness / 2)
+        
+        def check_emitter_collision(self, emitter, prong_x, prong_y):
+            if prong_x is None or prong_y is None:
+                print("Prong position is None, skipping collision check")
+                return False
+            
+            prong_end_pos = np.array([prong_x, prong_y])
+            emitter_pos = np.array(emitter[:2])
+            entity_pos = np.array([self.x, self.y])
+
+            prong_vector = prong_end_pos - entity_pos
+            emitter_vector = emitter_pos - entity_pos
+
+            # Calculate the projection of the emitter vector onto the prong vector
+            projection = np.dot(emitter_vector, prong_vector) / np.linalg.norm(prong_vector)
+            projected_vector = projection * prong_vector / np.linalg.norm(prong_vector)
+            closest_point = entity_pos + projected_vector
+
+            # Check if the projection falls within the prong's length
+            if np.linalg.norm(projected_vector) > np.linalg.norm(prong_vector) or projection < 0:
+                return False
+            
+            # Calculate the distance from the closest point on the prong to the emitter
+            distance_to_emitter = np.linalg.norm(closest_point - emitter_pos)
+
+            # Collision detected if the distance is less than the sum of the radii
+            emitter_radius = 10  # Assuming emitter radius is 10
+            return distance_to_emitter <= (emitter_radius + self.prong_thickness / 2)
 
         def move_response(self, distance, angle):
             self.x += np.cos(self.angle + angle) * distance
@@ -156,37 +184,69 @@ class OlfactoryEntity:
                 self.right_turn(self.response_angle)
 
         def straight_ahead(self, distance):
+            if distance < 0:
+                print("Distance cannot be negative, switching")
+            distance = abs(distance)
             self.x += np.cos(self.angle) * distance
             self.y += np.sin(self.angle) * distance
 
         def left_turn(self, angle, distance):
             self.angle += angle
+            if distance < 0:
+                print("Distance cannot be negative, switching")
+            distance = abs(distance)
             self.x += np.cos(self.angle) * distance
             self.y += np.sin(self.angle) * distance
 
         def right_turn(self, angle, distance):
             self.angle -= angle
+            if distance < 0:
+                print("Distance cannot be negative, switching")
+            distance = abs(distance)
             self.x += np.cos(self.angle) * distance
             self.y += np.sin(self.angle) * distance
 
         def interpret_output(self, output):
-            # TODO REWRITE FOR INTEGRATED CONTROL
-            if output == [1, 0, 0, 0]:
+            if output[0] == 1:
                 self.left_turn(self.response_angle, self.movement_counter)
                 self.wiggle_phase += self.tail_wiggle_speed
-            elif output == [0, 1, 0, 0] or [0, 0, 1, 0]:
+            elif output[0] > 0:
+                self.left_turn(self.response_angle * output[0], self.movement_counter * output[0])
+                self.wiggle_phase += self.tail_wiggle_speed * output[0]
+            if (output[1] == 1) and (output[2] == 1):
+                print('D-D-D-DOUBLE SPEEEED')
                 self.straight_ahead(self.movement_counter)
                 self.wiggle_phase += self.tail_wiggle_speed
-            elif output == [0, 1, 1, 0]:
                 self.straight_ahead(self.movement_counter)
                 self.wiggle_phase += self.tail_wiggle_speed
-            elif output == [0, 0, 0, 1]:
+            elif (output[1] == 1) or (output[2] == 1):
+                self.straight_ahead(self.movement_counter)
+                self.wiggle_phase += self.tail_wiggle_speed
+            elif (output[1] > 0):
+                self.straight_ahead(self.movement_counter * output[1])
+                self.wiggle_phase += self.tail_wiggle_speed * (output[1])
+            elif (output[2] > 0):
+                self.straight_ahead(self.movement_counter * output[2])
+                self.wiggle_phase += self.tail_wiggle_speed * (output[2])
+                
+            if (output[1] == 1) and (output[2] == 1):
+                self.straight_ahead(self.movement_counter)
+                self.wiggle_phase += self.tail_wiggle_speed
+                self.straight_ahead(self.movement_counter)
+                self.wiggle_phase += self.tail_wiggle_speed
+            if output[3] == 1:
                 self.right_turn(self.response_angle, self.movement_counter)
                 self.wiggle_phase += self.tail_wiggle_speed
+            elif output[3] > 0:
+                self.right_turn(self.response_angle * output[3], self.movement_counter * output[3])
+                self.wiggle_phase += self.tail_wiggle_speed * output[3]
 
-        def update(self, red_particles):
+            # TEST: MEMBRANE POTENTIAL, PERCENTAGES
             
-            self.spikes = [0,0,0,0]
+
+        def update(self, red_particles, emitter):
+            
+            self.spikes = [0,0,0,0,0,0]
 
             for particle in red_particles:
                 
@@ -195,6 +255,13 @@ class OlfactoryEntity:
                         self.spikes[i] = 1
                         self.particle_count += 1
 
+            # Check emitter collision for left prongs
+            if self.check_emitter_collision(emitter, self.prongs[0][0], self.prongs[0][1]) or self.check_emitter_collision(emitter, self.prongs[1][0], self.prongs[1][1]):
+                self.spikes[4] = 1
+
+            # Check emitter collision for right prongs
+            if self.check_emitter_collision(emitter, self.prongs[2][0], self.prongs[2][1]) or self.check_emitter_collision(emitter, self.prongs[3][0], self.prongs[3][1]):
+                self.spikes[5] = 1
 
             # print(self.spikes)
             output = Network.propagate_spike(self.network, self.spikes, self.particle_count)

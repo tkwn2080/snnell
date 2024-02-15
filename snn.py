@@ -142,9 +142,9 @@ class Neuron:
 
         self.base_activity = absence_counter
 
-        if self.refractory_counter == 0:
-            if self.neuron_type == 'hidden':
-                    self.intrinsic_activity()
+        # if self.refractory_counter == 0:
+        #     if self.neuron_type == 'hidden':
+        #             self.intrinsic_activity()
 
 
 class Layer:
@@ -283,23 +283,31 @@ class Network:
         self.network_decay()
 
         for i, spike in enumerate(spikes):
-            input_neuron = self.get_layer(0).neurons[i]
-            if spike == 1:
-                input_neuron.input_spike(1)
-                self.frequency_counter += 0.5
-                self.absence_counter *= 0.95
+            if i < 4:
+                input_neuron = self.get_layer(0).neurons[i]
+                if spike == 1:
+                    input_neuron.input_spike(1)
+                    self.frequency_counter += 0.5
+                    self.absence_counter *= 0.95
+                    print(f'Frequency counter: {self.frequency_counter}')
+                    print(f'Particle counter: {count}')
 
-                reward = count * math.sqrt(self.frequency_counter)
-                # print(count, self.frequency_counter, reward, self.global_signal)
-                self.global_signal += reward / 500
-            elif spike == 0:
+                    reward = math.sqrt(self.frequency_counter)
+                    # print(count, self.frequency_counter, reward, self.global_signal)
+                    self.global_signal += reward / 1000
+                elif spike == 0:
+                    input_neuron = self.get_layer(0).neurons[i+4]
+                    input_neuron.input_spike(0.5)
+                    self.absence_counter += 0.5
+
+                    punishment = math.sqrt(self.absence_counter)
+                    self.global_signal -= punishment / 1000
+                    # print(self.global_signal)
+            elif i >= 4:
                 input_neuron = self.get_layer(0).neurons[i+4]
-                input_neuron.input_spike(0.5)
-                self.absence_counter += 0.5
-
-                punishment = math.sqrt(self.absence_counter)
-                self.global_signal -= punishment / 500
-                # print(self.global_signal)
+                input_neuron.input_spike(1)
+                self.global_signal += 2
+    
         
         for layer in self.layers:
             for neuron in layer.neurons:
@@ -326,6 +334,8 @@ class Network:
                 neuron.spiked = False
                 output[int(neuron.id[-1])] = 1
                 spiked = True
+            else:
+                output[int(neuron.id[-1])] = round(neuron.membrane_potential, 2)
         if spiked == True:
             if self.print_counter > 50:
                 print(f'Action potentials: {output}')

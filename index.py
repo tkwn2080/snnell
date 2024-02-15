@@ -144,11 +144,13 @@ def run_simulation(genotype, screen, clock, current_trial, total_trials, current
             white_particles.append([1200, np.random.randint(0, 800), -np.random.rand() * 2 - 0.5, np.random.rand() * 2 - 1])
 
     # Define the emitter's position and the larger sphere's radius
-    # emitter_x = 900  # Keep the emitter towards the right side
+    # emitter_x = 900  # Keep the towards the right side
     # emitter_y = 200  # Vertical middle of the screen
     emitter_x = np.random.randint(900, 1100)  # Randomly vary the x-coordinate
     emitter_y = np.random.randint(200, 600)  # Randomly vary the y-coordinate
     emitter_radius = 10  # Radius of the larger sphere
+
+    emitter = [emitter_x, emitter_y]
 
     def check_collision_with_emitter(entity_x, entity_y, emitter_x, emitter_y, entity_size, emitter_radius, probe_length, probe_angle):
         # Check collision between entity and emitter
@@ -378,11 +380,13 @@ def run_simulation(genotype, screen, clock, current_trial, total_trials, current
 
         # Update and draw the olfactory tracking entity
 
+
+
         if current_time - simulation_start_time > entity_start_time:
             if first_draw == True:
                 olfactory_entity.draw(screen)
                 first_draw = False
-            olfactory_entity.update(list(red_particles))  # Pass a list of red_particles for sensing
+            olfactory_entity.update(list(red_particles), emitter)  # Pass a list of red_particles for sensing
             olfactory_entity.draw(screen)
 
         if reward_signal != 0:
@@ -464,15 +468,6 @@ def generate_random_name(length=6):
     letters = string.ascii_lowercase
     return ''.join(random.choice(letters) for i in range(length))
 
-# Function to round genotype values
-def round_genotype(genotype):
-    return tuple(round(g, 1) for g in genotype[:4])
-
-
-    
-
-
-
 # Initialize a dictionary to store individual fitness along with their genotype and heritage
 individual_data = {}
 
@@ -534,13 +529,13 @@ for epoch in range(num_epochs):
 
         # Check if individual is new or updating
         if individual_name not in individual_data:
-            rounded_genotype = round_genotype(individual)
+            collated_genotype, collated_weights = collate_genotype(individual)
             individual_data[individual_name] = {
                 'epoch': epoch + 1,
-                'genotype': rounded_genotype,
                 'fitness': avg_fitness,
                 'heritage': 'origin',
-                'genotype': individual
+                'genotype': collated_genotype,
+                'weights': collated_weights,
             }
         else:
             individual_data[individual_name]['fitness'] = avg_fitness  # Update existing fitness
@@ -577,12 +572,14 @@ for epoch in range(num_epochs):
             for child in children:  # Iterate over each child in the list
                 child_name = generate_random_name() + " " + generate_random_name()
                 new_population.append(child)
+                collated_genotype, collated_weights = collate_genotype(child)
                 individual_data[child_name] = {
                     'genotype': child,
                     'fitness': None,  # Placeholder, actual fitness to be calculated in the next epoch
                     'heritage': f'child of {top_individuals[i][0]} and {top_individuals[j][0]}',
                     'epoch': epoch + 1,
-                    'genotype': child
+                    'genotype': collated_genotype,
+                    'weights': collated_weights
                 }
 
     print(f"Number of offspring: {len(new_population)}")

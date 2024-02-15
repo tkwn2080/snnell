@@ -4,7 +4,7 @@ import copy
 def spawn():
     # self.prong_length = length
     # length = np.random.uniform(40, 100)
-    length = 40
+    length = 60
 
     # self.prong_angle = probe_angle
     # probe_angle = np.random.uniform(15, 75) * (np.pi / 180)
@@ -48,7 +48,7 @@ def spawn():
     return genetic_code
 
 def random_architecture():
-    input_layer = 8
+    input_layer = 10
     output_layer = 4
     architecture = []
     architecture.append(input_layer)
