@@ -16,11 +16,11 @@ def spawn():
 
     # self.movement_counter = distance
     # distance = np.random.uniform(2, 8)
-    distance = 5
+    distance = 3
 
     # self.speed = speed
     # speed = np.random.uniform(2, 8)
-    speed = 5
+    speed = 3
 
     architecture, depth = random_architecture()
 
@@ -28,12 +28,18 @@ def spawn():
 
     learning_rate = np.random.uniform(0.1, 2) / 10000
 
-    eligibility_decay = np.random.uniform(0.1,0.99)
+    # eligibility_decay = np.random.uniform(0.5,0.99)
+    eligibility_decay = 1
+
+    ltp_rate = np.random.uniform(0.1, 5) / 1000
+    ltd_rate = np.random.uniform(0.1, 5) / 1000
 
     parameters = []
 
     parameters.append(learning_rate)
     parameters.append(eligibility_decay)
+    parameters.append(ltp_rate)
+    parameters.append(ltd_rate)
 
     weights, recurrence = add_recurrence(weights, architecture)
 
@@ -43,7 +49,7 @@ def spawn():
 
 def random_architecture():
     input_layer = 8
-    output_layer = 3
+    output_layer = 4
     architecture = []
     architecture.append(input_layer)
     hidden_depth = np.random.randint(2,4)
@@ -56,17 +62,11 @@ def random_architecture():
     return architecture, total_depth
     
 def initialise_weights(dimensions):
-    print(dimensions)
     weights = {}
     for i in range(1, len(dimensions)):
-        fan_in = dimensions[i - 1]
-        fan_out = dimensions[i]
-        # Xavier/Glorot initialization variance
-        variance = 2 / (fan_in + fan_out)
-        layer_weights = np.random.normal(0, np.sqrt(variance), (dimensions[i], dimensions[i - 1]))
         for j in range(dimensions[i]):
             for k in range(dimensions[i - 1]):
-                weights[f'l{i-1}-n{k}_l{i}-n{j}'] = layer_weights[j, k]
+                weights[f'l{i-1}-n{k}_l{i}-n{j}'] = np.random.normal(0, 1)
     return weights
 
 def add_recurrence(weights, dimensions):
@@ -79,9 +79,9 @@ def add_recurrence(weights, dimensions):
                 layer = i + 1
 
                 for n in range(dimensions[layer]):
-                    weight = np.random.uniform(0, 1)
+                    weight = np.random.normal(0, 1)
                     weights[f'l{layer}-n{n}_rec'] = weight
-                    print(f'Added recurrence weight {weight} to neuron {n} in layer {layer}')
+                    # print(f'Added recurrence weight {weight} to neuron {n} in layer {layer}')
                 break
                 
     return weights, layer
@@ -142,18 +142,28 @@ def reproduction(mother, father, mutation_rate):
     for child in progeny:
         mutated_child = mutate(child, mutation_rate)
         if np.random.uniform(0, 1) < 0.5:
-            mutated_weights = weights_mutation(mother[5])
-            mutated_child.append(mutated_weights)
+            # mutated_weights = weights_mutation(mother[5])
+            # mutated_child.append(mutated_weights)
+            mutated_child.append(mother[5])
+            print(mother[6])
             mutated_child.append(mother[6])
+            print(mother[7])
             mutated_child.append(mother[7])
+            print(mother[8])
             mutated_child.append(mother[8])
+            print(mother[9])
             mutated_child.append(mother[9])
         else:
-            mutated_weights = weights_mutation(father[5])
-            mutated_child.append(mutated_weights)
+            # mutated_weights = weights_mutation(father[5])
+            # mutated_child.append(mutated_weights)
+            mutated_child.append(father[5])
+            print(father[6])
             mutated_child.append(father[6])
+            print(father[7])
             mutated_child.append(father[7])
+            print(father[8])
             mutated_child.append(father[8])
+            print(father[9])
             mutated_child.append(father[9])
         
         mutated_progeny.append(mutated_child)

@@ -67,6 +67,10 @@ class Neuron:
 
     def spike_timing(self, last_sent):
         for key in self.last_received:
+            
+            if key == self.id:
+                continue
+
             time_difference = last_sent - self.last_received[key]
 
             if time_difference > 0:
@@ -105,36 +109,21 @@ class Neuron:
             if np.random.uniform(0, 1) < self.base_activity / 100:
                 self.membrane_potential += np.random.normal(0.1, 1)
 
-    def update_weights(self, global_signal):
-        # Assuming global_signal is a scalar and self.eligibility is properly managed as a dictionary of scalar values
+    def update_weights(self, normalized_eligibility, global_signal):
+        # Assuming global_signal is a scalar and normalized_eligibility is properly managed as a dictionary of scalar values
         for source in self.weights:
-            # Ensure self.eligibility[source] is treated as a scalar
-            # print(f'Eligibity for {source}: {self.eligibility[source]}')
-            # print(f'Global Signal: {global_signal}')
-            
-            adjusted_trace = self.eligibility[source] * global_signal  # This should be a scalar operation
+            # Ensure normalized_eligibility[source] is treated as a scalar
+            adjusted_trace = normalized_eligibility[source] * global_signal  # This should be a scalar operation
 
             # Compute the weight update, which is also a scalar operation
             weight_update = self.learning_rate * adjusted_trace
 
-            if global_signal < 0:
-                weight_update = weight_update / 2
-
-            # if self.print_counter > 5000:
-            #     print(f'Eligibility: {self.eligibility[source]}')
-            #     print(f'Global Signal: {global_signal}')
-            #     print(f'Adjusted Trace: {adjusted_trace}')
-            #     print(f'Weight Update: {weight_update}')
-            #     self.print_counter = 0
-
             # Apply the weight update
             if global_signal != 0:
-                self.weights[source] += weight_update
+                self.weights[source] += weight_update * np.sign(self.weights[source])
                 self.weights[source] = np.clip(self.weights[source], -1, 1)
             
-            # self.print_counter += 1
-            
-    def update(self, global_signal, absence_counter):
+    def update(self, absence_counter):
         if self.membrane_potential > self.threshold:
             self.send_spike()
             self.membrane_potential = self.reset
@@ -152,8 +141,6 @@ class Neuron:
 
 
         self.base_activity = absence_counter
-
-        self.update_weights(global_signal)
 
         if self.refractory_counter == 0:
             if self.neuron_type == 'hidden':
@@ -300,27 +287,38 @@ class Network:
             if spike == 1:
                 input_neuron.input_spike(1)
                 self.frequency_counter += 0.5
-                self.absence_counter -= 0.5
+                self.absence_counter *= 0.95
 
-                reward = count * math.exp(self.frequency_counter)
+                reward = count * math.sqrt(self.frequency_counter)
                 # print(count, self.frequency_counter, reward, self.global_signal)
-                self.global_signal += reward / 1000
+                self.global_signal += reward / 500
             elif spike == 0:
                 input_neuron = self.get_layer(0).neurons[i+4]
-                input_neuron.input_spike(0.2)
+                input_neuron.input_spike(0.5)
                 self.absence_counter += 0.5
-                self.global_signal -= self.absence_counter / 1000
+
+                punishment = math.sqrt(self.absence_counter)
+                self.global_signal -= punishment / 500
+                # print(self.global_signal)
         
         for layer in self.layers:
             for neuron in layer.neurons:
-                neuron.update(self.global_signal, self.absence_counter)
+                neuron.update(self.absence_counter)
+
+        normalized_eligibility = self.normalise_eligibility()
+        if normalized_eligibility == False:
+            print("No normalization performed. Skipping weight updates.")
+        else:
+            for layer in self.layers:
+                for neuron in layer.neurons:
+                    neuron.update_weights(normalized_eligibility[neuron.id], self.global_signal)
         
         output = self.get_outputs()
         return output
 
     def get_outputs(self):
         # Retrieve the outputs from the output layer
-        output = [0, 0, 0]
+        output = [0, 0, 0, 0]
         spiked = False
         last_layer_index = len(self.layers) - 1
         for neuron in self.get_layer(last_layer_index).neurons:
@@ -330,7 +328,7 @@ class Network:
                 spiked = True
         if spiked == True:
             if self.print_counter > 50:
-                # print(f'Action potentials: {output}')
+                print(f'Action potentials: {output}')
                 self.print_counter = 0
             self.print_counter += 1
 
@@ -340,7 +338,7 @@ class Network:
         #     for neuron in self.get_layer(last_layer_index).neurons:
         #         output[int(neuron.id[-1])] = neuron.membrane_potential
         #     if self.print_counter > 50:
-        #         print(f'Membrane potentials: {output}')
+        #         # print(f'Membrane potentials: {output}')
         #         self.print_counter = 0
         #     self.print_counter += 1
         #     max_potential = max(output)
@@ -350,6 +348,46 @@ class Network:
              
     def modify_learning(self, reward_signal):
         self.global_signal += reward_signal
+
+    def start_trial(self):
+        start_counter = 0
+            
+        print(self.global_signal)
+        while start_counter < 10:
+            if self.global_signal != 0:
+                normalized_eligibility = self.normalise_eligibility()
+                if normalized_eligibility == False:
+                    print("No normalization performed. Skipping weight updates.")
+                else:
+                    for layer in self.layers:
+                        for neuron in layer.neurons:
+                            neuron.update(self.absence_counter)
+                            neuron.update_weights(normalized_eligibility[neuron.id], self.global_signal)
+            start_counter += 1
+            # print(f'Countdown to start: {10 - start_counter}')
+
+        self.reset_membranes()
+        self.global_signal = 0
+        self.frequency_counter = 1
+        self.absence_counter = 0
+
+        for layer in self.layers:
+            for neuron in layer.neurons:
+                neuron.base_activity = 0
+                for key in neuron.eligibility:
+                    neuron.eligibility[key] = 0
+
+    def normalise_eligibility(self):
+        total_eligibility = sum(sum(neuron.eligibility.values()) for layer in self.layers for neuron in layer.neurons)
+        normalized_eligibility = {}
+        if total_eligibility == 0:
+            print("Total eligibility is zero. Normalization not performed.")
+            normalized_eligibility = False
+            return normalized_eligibility
+        for layer in self.layers:
+            for neuron in layer.neurons:
+                normalized_eligibility[neuron.id] = {source: trace / total_eligibility for source, trace in neuron.eligibility.items()}
+        return normalized_eligibility
 
     def update_signal(self):
         self.global_signal *= self.signal_decay
@@ -368,7 +406,10 @@ class Network:
                 for source_id, weight in neuron.weights.items():
                     # Extract the index of the source neuron from its id
                     k = int(source_id.split('-n')[-1])
-                    weights[f'l{i-1}-n{k}_l{i}-n{j}'] = weight
+                    if source_id == neuron.id:  # Check if the source neuron is the same as the current neuron
+                        weights[f'{neuron.id}_rec'] = weight  # Store the weight with the _rec suffix
+                    else:
+                        weights[f'l{i-1}-n{k}_l{i}-n{j}'] = weight
         return weights
         
                 

@@ -5,6 +5,7 @@ from collections import deque
 import random
 import string
 import csv
+import time
 
 from evolve import init_population, reproduction
 from entity import OlfactoryEntity
@@ -16,14 +17,44 @@ clock = pygame.time.Clock()
 
 reward_signal = 0
 
-trial_csv_filename = 'trial_data.csv'
+trial_csv_filename = './records/trial_data.csv'
 with open(trial_csv_filename, 'w', newline='') as trial_csvfile:
     trial_fieldnames = ['trial_number', 'individual_name', 'particle_count', 'fitness']
     trial_writer = csv.DictWriter(trial_csvfile, fieldnames=trial_fieldnames)
     trial_writer.writeheader()
 
+def collate_genotype(genotype):
+    genotype_str = f"Learning Rate: {genotype[8][0]}, Eligibility Decay: {genotype[8][1]}, Recurrent Layer: {genotype[9]}"
+    weights_str = ', '.join([f"{k}: {v}" for k, v in genotype['weights'].items()])
+    return genotype_str, weights_str
 
-def run_simulation(genotype, screen, clock, current_trial, total_trials, current_candidate, total_candidates, current_epoch, num_epochs, network):
+distance_records = {}
+
+def calculate_distance(emitter_x, emitter_y, final_x, final_y, individual_name):
+    # Calculate the actual distance between the emitter and the final position
+    actual_distance = np.hypot(final_x - emitter_x, final_y - emitter_y)
+    
+    # Calculate the maximum possible distance in the simulation space
+    max_distance = np.hypot(1200, 800)
+    
+    # Normalize the actual distance to a 1-10 scale
+    # The scale is inverted since a lower score means closer
+    scaled_distance = (actual_distance / max_distance * 9) + 1
+    
+    # Ensure the scaled distance is within the bounds of 1-10
+    scaled_distance = max(min(scaled_distance, 10), 1)
+    
+    # Check if this is the first record for this individual or if it's a new minimum distance
+    # Only note down a record if the score is below 2.5
+    if (individual_name not in distance_records) or (scaled_distance < 2.5 and scaled_distance < distance_records[individual_name]):
+        distance_records[individual_name] = scaled_distance
+        is_record = True
+    else:
+        is_record = False
+    
+    return scaled_distance, is_record
+
+def run_simulation(genotype, screen, clock, current_trial, total_trials, current_candidate, total_candidates, current_epoch, num_epochs, network, individual_name):
 
     global reward_signal
     network = network
@@ -116,7 +147,7 @@ def run_simulation(genotype, screen, clock, current_trial, total_trials, current
     # emitter_x = 900  # Keep the emitter towards the right side
     # emitter_y = 200  # Vertical middle of the screen
     emitter_x = np.random.randint(900, 1100)  # Randomly vary the x-coordinate
-    emitter_y = np.random.randint(100, 700)  # Randomly vary the y-coordinate
+    emitter_y = np.random.randint(200, 600)  # Randomly vary the y-coordinate
     emitter_radius = 10  # Radius of the larger sphere
 
     def check_collision_with_emitter(entity_x, entity_y, emitter_x, emitter_y, entity_size, emitter_radius, probe_length, probe_angle):
@@ -148,7 +179,7 @@ def run_simulation(genotype, screen, clock, current_trial, total_trials, current
         add_to_grid(new_particle, grid)  # Add the new particle to the grid
 
     simulation_start_time = pygame.time.get_ticks()  # Get the start time of the simulation
-    simulation_time_limit = 60000  # Set a time limit for the simulation (in milliseconds)
+    simulation_time_limit = 30000  # Set a time limit for the simulation (in milliseconds)
     opening_countdown = 0  # Countdown to the opening of the prongs
 
     olfactory_entity = OlfactoryEntity(100, 400, length, probe_angle, response_angle, distance, speed, network)
@@ -162,12 +193,19 @@ def run_simulation(genotype, screen, clock, current_trial, total_trials, current
         if current_time - simulation_start_time > simulation_time_limit:
             
             # Punish the entity for not finding the emitter in time
-            if olfactory_entity.particle_count != 0:
-                punishment = (100 * calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y)) / (olfactory_entity.particle_count / 2)
-            else:
-                punishment = 100 * calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y)
-            reward_signal -= punishment
-            print(f'Punishment for not finding the emitter in time: {punishment}. Ending simulation.')
+
+            distance, is_record = calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y, individual_name)
+            if is_record == True:
+                reward_signal += 50
+                print(f'Reward for closest distance: {distance}.')
+            else: 
+                if olfactory_entity.particle_count != 0:
+                    punishment = (1000 * distance / (olfactory_entity.particle_count))
+                else:
+                    punishment = 100 * distance
+                reward_signal -= punishment
+                print(f'Punishment for not finding the emitter in time: {punishment}. Ending simulation.')
+            Network.modify_learning(network, reward_signal)
 
             break  # Exit the simulation loop after the time limit
 
@@ -183,13 +221,18 @@ def run_simulation(genotype, screen, clock, current_trial, total_trials, current
 
         if olfactory_entity.x < BOUNDARY_LEFT or olfactory_entity.x > BOUNDARY_RIGHT or olfactory_entity.y < BOUNDARY_TOP or olfactory_entity.y > BOUNDARY_BOTTOM:
             
-            # Punish the entity for going out of bounds
-            if olfactory_entity.particle_count != 0:
-                punishment = (100 * calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y)) / (olfactory_entity.particle_count / 2)
-            else:
-                punishment = 100 * calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y)
-            reward_signal -= punishment
-            print(f"Punishment for going out of bounds: {punishment}. Ending simulation.")
+            distance, is_record = calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y, individual_name)
+            if is_record == True:
+                reward_signal += 50
+                print(f'Reward for closest distance: {distance}.')
+            else: 
+                if olfactory_entity.particle_count != 0:
+                    punishment = (1000 * distance / (olfactory_entity.particle_count))
+                else:
+                    punishment = 100 * distance
+                print(f"Punishment for going out of bounds: {punishment}. Ending simulation.")
+                reward_signal -= punishment
+            Network.modify_learning(network, reward_signal)
             return {
                 'collided': False,
                 'collision_time': None,
@@ -202,6 +245,24 @@ def run_simulation(genotype, screen, clock, current_trial, total_trials, current
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                filename = time.strftime("%d%m%Y%H") + '_individual_data.csv'
+                csv_filename = './records/' + filename
+                with open(csv_filename, 'w', newline='') as csvfile:
+                    fieldnames = ['name', 'genotype', 'fitness', 'heritage', 'epoch', 'genotype', 'weights']
+                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+                    writer.writeheader()
+                    for individual_name, data in individual_data.items():
+                        collated_genotype, collated_weights = collate_genotype(data['genotype'])
+                        writer.writerow({
+                            'name': individual_name,
+                            'fitness': data['fitness'],
+                            'heritage': data['heritage'],
+                            'epoch': data['epoch'],
+                            'genotype': collated_genotype,
+                            'weights': collated_weights
+                        })
+                print(f"Individual data exported to {csv_filename}.")
                 pygame.quit()
                 sys.exit()
 
@@ -241,6 +302,7 @@ def run_simulation(genotype, screen, clock, current_trial, total_trials, current
                 
                 # Reward the entity for finding the emitter
                 reward_signal += 100
+                Network.modify_learning(network, reward_signal)
                 
                 print("Collision with emitter at time:", olfactory_entity.collision_time)
                 return {
@@ -258,13 +320,17 @@ def run_simulation(genotype, screen, clock, current_trial, total_trials, current
         if opening_countdown > 600:
             if olfactory_entity.timesteps_since_touch > 1200:
 
-                # Punish the entity for getting lost
-                if olfactory_entity.particle_count != 0:
-                    punishment = (100 * calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y)) / (olfactory_entity.particle_count / 2)
-                else:
-                    punishment = 100 * calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y)
-                reward_signal -= punishment
-                print(f"Punishment for getting lost: {punishment}. Ending simulation.")
+                distance, is_record = calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y, individual_name)
+                if is_record == True:
+                    reward_signal += 50
+                    print(f'Reward for closest distance: {distance}.')
+                else: 
+                    if olfactory_entity.particle_count != 0:
+                        punishment = (1000 * distance / (olfactory_entity.particle_count))
+                    else:
+                        punishment = 100 * distance
+                    reward_signal -= punishment
+                    print(f"Punishment for getting lost: {punishment}. Ending simulation.")
 
                 return {
                     'collided': False,
@@ -286,9 +352,6 @@ def run_simulation(genotype, screen, clock, current_trial, total_trials, current
 
         # Inside the main simulation loop, where you're iterating over red_particles
         for particle in list(red_particles):
-
-            
-            
             if update_particle(particle, grid):  # This function already handles grid updates
                 red_particles.remove(particle)
             else:
@@ -362,48 +425,32 @@ def run_simulation(genotype, screen, clock, current_trial, total_trials, current
         'emitter_radius': emitter_radius,
         'particle_count': olfactory_entity.particle_count
     }
-
-def calculate_distance(emitter_x, emitter_y, final_x, final_y):
-    # Calculate the actual distance between the emitter and the final position
-    actual_distance = np.hypot(final_x - emitter_x, final_y - emitter_y)
     
-    # Calculate the maximum possible distance in the simulation space
-    max_distance = np.hypot(1200, 800)
-    
-    # Normalize the actual distance to a 1-10 scale
-    # The scale is inverted since a higher score means farther away
-    scaled_distance = 10 - (actual_distance / max_distance * 9)
-    
-    # Ensure the scaled distance is within the bounds of 1-10
-    scaled_distance = max(min(scaled_distance, 10), 1)
-    
-    return scaled_distance
-    
-def calculate_fitness(simulation_data, time_limit=60000):
+def calculate_fitness(simulation_data, time_limit=30000):
     emitter_x, emitter_y = simulation_data['emitter_position']
     # If the entity collided, fitness is the time until collision
     if simulation_data['collided']:
-        simulation_time = simulation_data['collision_time']
-        particle_count = simulation_data['particle_count'] / 10
-        if particle_count == 0:
-            return time_limit
-        if particle_count > 0:
-            return simulation_time / (particle_count / 2)
+        # simulation_time = simulation_data['collision_time']
+        # particle_count = simulation_data['particle_count'] / 10
+        # if particle_count == 0:
+        #     return time_limit
+        # if particle_count > 0:
+        #     return simulation_time / (particle_count / 10)
+        return 0
     else:
         # If the entity did not collide, calculate the final distance from the emitter
         final_x, final_y = simulation_data['final_position']
         particle_count = simulation_data['particle_count'] / 10
-        final_distance = np.hypot(final_x - emitter_x, final_y - emitter_y) * 10
+        final_distance = np.hypot(final_x - emitter_x, final_y - emitter_y) * 100
         # Add the time limit to the distance to ensure distance-based fitness
         # always exceeds time-based fitness and place them on a single continuum
         if particle_count == 0:
             return time_limit + final_distance
         if particle_count > 0:
-            return (time_limit + final_distance) / (particle_count / 2)
+            return (time_limit + final_distance) / (particle_count / 10)
 
-
-num_epochs = 2  # Set the number of epochs for the evolution process
-population_size = 12  # Ensure this is divisible by 2 for simplicity
+num_epochs = 1  # Set the number of epochs for the evolution process
+population_size = 4  # Ensure this is divisible by 2 for simplicity
 mutation_rate = 0.1  # Mutation rate for the reproduction process
 
 
@@ -457,11 +504,11 @@ for epoch in range(num_epochs):
 
         # Run trials and calculate average fitness
         total_fitness = 0
-        total_trials = 250
+        total_trials = 200
         for _ in range(total_trials):  # Two trials per individual
-            network.reset_membranes()
+            network.start_trial()
             print(f"Running trial {_ + 1} for {individual_name}")
-            simulation_data = run_simulation(individual, screen, clock, _ + 1, total_trials, population.index(individual) + 1, len(population), epoch + 1, num_epochs, network)
+            simulation_data = run_simulation(individual, screen, clock, _ + 1, total_trials, population.index(individual) + 1, len(population), epoch + 1, num_epochs, network, individual_name)
             print(f"Particle count: {simulation_data['particle_count']}")
             fitness = calculate_fitness(simulation_data)
             print(f"Fitness: {fitness}")
@@ -534,28 +581,35 @@ for epoch in range(num_epochs):
                     'genotype': child,
                     'fitness': None,  # Placeholder, actual fitness to be calculated in the next epoch
                     'heritage': f'child of {top_individuals[i][0]} and {top_individuals[j][0]}',
-                    'epoch': epoch + 1
+                    'epoch': epoch + 1,
+                    'genotype': child
                 }
 
     print(f"Number of offspring: {len(new_population)}")
     population = new_population  # Update the population for the next epoch
 
+def collate_genotype(genotype):
+    genotype_str = f"Learning Rate: {genotype['learning_rate']}, Eligibility Decay: {genotype['eligibility_decay']}, Recurrent Layer: {genotype['recurrent_layer']}"
+    weights_str = ', '.join([f"{k}: {v}" for k, v in genotype['weights'].items()])
+    return genotype_str, weights_str
+
 # Writing to CSV logic remains unchanged
-csv_filename = 'individual_data.csv'
+csv_filename = time.strftime("%d%m%Y%H") + '_individual_data.csv'
 with open(csv_filename, 'w', newline='') as csvfile:
-    fieldnames = ['name', 'genotype', 'fitness', 'heritage', 'epoch']
+    fieldnames = ['name', 'genotype', 'fitness', 'heritage', 'epoch', 'genotype', 'weights']
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
     writer.writeheader()
     for individual_name, data in individual_data.items():
+        collated_genotype, collated_weights = collate_genotype(data['genotype'])
         writer.writerow({
             'name': individual_name,
             'fitness': data['fitness'],
             'heritage': data['heritage'],
             'epoch': data['epoch'],
-            'genotype': data['genotype']
+            'genotype': collated_genotype,
+            'weights': collated_weights
         })
-
 
 
 print(f"Individual data exported to {csv_filename}.")

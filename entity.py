@@ -77,8 +77,7 @@ class OlfactoryEntity:
             recessed_x2 = recessed_x1 - np.cos(self.angle) * self.size * 0.75
             recessed_y2 = recessed_y1 - np.sin(self.angle) * self.size * 0.75
             pygame.draw.circle(screen, (0, 255, 0), (int(recessed_x2), int(recessed_y2)), self.size / 2)
-
-            
+    
             # FIRST PRONGS
             left_prong_x = self.x + np.cos(self.angle + self.prong_angle) * self.prong_length
             self.L1_prong_x = left_prong_x
@@ -102,7 +101,8 @@ class OlfactoryEntity:
             self.R2_prong_y = right_prong2_y
             pygame.draw.line(screen, (0, 255, 0), (recessed_x1, recessed_y1), (left_prong2_x, left_prong2_y), 1)
             pygame.draw.line(screen, (0, 255, 0), (recessed_x1, recessed_y1), (right_prong2_x, right_prong2_y), 1)
-
+    
+    
             # TAIL
             wiggle_effect = np.sin(self.wiggle_phase) * self.tail_wiggle_angle
             tail_angle = self.angle + wiggle_effect
@@ -170,13 +170,17 @@ class OlfactoryEntity:
             self.y += np.sin(self.angle) * distance
 
         def interpret_output(self, output):
-            if output == [1, 0, 0]:
+            # TODO REWRITE FOR INTEGRATED CONTROL
+            if output == [1, 0, 0, 0]:
                 self.left_turn(self.response_angle, self.movement_counter)
                 self.wiggle_phase += self.tail_wiggle_speed
-            elif output == [0, 1, 0]:
+            elif output == [0, 1, 0, 0] or [0, 0, 1, 0]:
                 self.straight_ahead(self.movement_counter)
                 self.wiggle_phase += self.tail_wiggle_speed
-            elif output == [0, 0, 1]:
+            elif output == [0, 1, 1, 0]:
+                self.straight_ahead(self.movement_counter)
+                self.wiggle_phase += self.tail_wiggle_speed
+            elif output == [0, 0, 0, 1]:
                 self.right_turn(self.response_angle, self.movement_counter)
                 self.wiggle_phase += self.tail_wiggle_speed
 
