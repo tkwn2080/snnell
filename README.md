@@ -10,7 +10,8 @@ This worked really well, it was almost eery to see this blind thing move with ap
 The second iteration gave the creature a brain, which initially made it much stupider.
 I have here built a simple spiking neural network (SNN) implementation based on my conceptual understanding of neurons.
 To this I have attempted to add reinforcement learning, and the whole has been an exercise in understanding.
-The genetic algorithm aspect was maintained and used to select architectures, etc. I later added recurrent layers.
+The genetic algorithm aspect was maintained and used to select architectures, etc. 
+I later added recurrent layers, which are also selected in this way.
 
 The third iteration, that present, has been a rewrite of the simulation structure.
 I have implemented parallelisation in a headless mode so that I can have larger runs.
