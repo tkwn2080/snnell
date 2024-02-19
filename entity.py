@@ -8,7 +8,8 @@ class OlfactoryEntity:
             self.y = y
             self.speed = speed
             self.size = 12
-            self.angle = 0  # Entity's facing angle, where 0 is facing to the right
+            self.angle = 0
+            # self.angle = np.random.uniform(0, 2*np.pi)  # Entity's facing angle, where 0 is facing to the right and the angle is randomly initialized
             self.prong_length = length
             self.prong_thickness = 3
             self.prong_angle = probe_angle
@@ -43,6 +44,9 @@ class OlfactoryEntity:
             self.wiggle_phase = 0  # Current phase of the wiggle
 
             self.network = network
+
+            self.closest_distance = 800
+            self.last_five_distances = []
             
         def update_prong_positions(self):
             # Calculate and update the positions of all prongs based on the current entity position and angle
@@ -79,25 +83,27 @@ class OlfactoryEntity:
             pygame.draw.circle(screen, (0, 255, 0), (int(recessed_x2), int(recessed_y2)), self.size / 2)
     
             # FIRST PRONGS
-            left_prong_x = self.x + np.cos(self.angle + self.prong_angle) * self.prong_length
+            forward_shift = self.size * 0.5
+            left_prong_x = self.x + np.cos(self.angle + self.prong_angle) * self.prong_length + np.cos(self.angle) * forward_shift
             self.L1_prong_x = left_prong_x
-            left_prong_y = self.y + np.sin(self.angle + self.prong_angle) * self.prong_length
+            left_prong_y = self.y + np.sin(self.angle + self.prong_angle) * self.prong_length + np.sin(self.angle) * forward_shift
             self.L1_prong_y = left_prong_y
-            right_prong_x = self.x + np.cos(self.angle - self.prong_angle) * self.prong_length
+            right_prong_x = self.x + np.cos(self.angle - self.prong_angle) * self.prong_length + np.cos(self.angle) * forward_shift
             self.R1_prong_x = right_prong_x
-            right_prong_y = self.y + np.sin(self.angle - self.prong_angle) * self.prong_length
+            right_prong_y = self.y + np.sin(self.angle - self.prong_angle) * self.prong_length + np.sin(self.angle) * forward_shift
             self.R1_prong_y = right_prong_y
             pygame.draw.line(screen, (0, 255, 0), (self.x, self.y), (left_prong_x, left_prong_y), 1)
             pygame.draw.line(screen, (0, 255, 0), (self.x, self.y), (right_prong_x, right_prong_y), 1)
 
             # SECOND PRONGS
-            left_prong2_x = recessed_x1 + np.cos(self.angle + self.prong_angle) * self.prong_length
+            backward_shift = self.size * 0.5
+            left_prong2_x = recessed_x1 + np.cos(self.angle + self.prong_angle) * self.prong_length - np.cos(self.angle) * backward_shift
             self.L2_prong_x = left_prong2_x
-            left_prong2_y = recessed_y1 + np.sin(self.angle + self.prong_angle) * self.prong_length
+            left_prong2_y = recessed_y1 + np.sin(self.angle + self.prong_angle) * self.prong_length - np.sin(self.angle) * backward_shift
             self.L2_prong_y = left_prong2_y
-            right_prong2_x = recessed_x1 + np.cos(self.angle - self.prong_angle) * self.prong_length
+            right_prong2_x = recessed_x1 + np.cos(self.angle - self.prong_angle) * self.prong_length - np.cos(self.angle) * backward_shift
             self.R2_prong_x = right_prong2_x
-            right_prong2_y = recessed_y1 + np.sin(self.angle - self.prong_angle) * self.prong_length
+            right_prong2_y = recessed_y1 + np.sin(self.angle - self.prong_angle) * self.prong_length - np.sin(self.angle) * backward_shift
             self.R2_prong_y = right_prong2_y
             pygame.draw.line(screen, (0, 255, 0), (recessed_x1, recessed_y1), (left_prong2_x, left_prong2_y), 1)
             pygame.draw.line(screen, (0, 255, 0), (recessed_x1, recessed_y1), (right_prong2_x, right_prong2_y), 1)
@@ -168,6 +174,38 @@ class OlfactoryEntity:
             # Collision detected if the distance is less than the sum of the radii
             emitter_radius = 10  # Assuming emitter radius is 10
             return distance_to_emitter <= (emitter_radius + self.prong_thickness / 2)
+        
+        def homing_radar(self, emitter):
+            # Calculate the distance between the emitter and the entity
+            current_distance = np.linalg.norm(np.array([self.x, self.y]) - np.array(emitter[:2]))
+            
+            # Store the current distance in the list of last 5 distances
+            self.last_five_distances.append(current_distance)
+            
+            # If we have more than 5 distances, remove the oldest one
+            if len(self.last_five_distances) > 20:
+                self.last_five_distances.pop(0)
+            
+            # Calculate velocities based on the distances
+            if len(self.last_five_distances) > 1:
+                velocities = [self.last_five_distances[i+1] - self.last_five_distances[i] for i in range(len(self.last_five_distances)-1)]
+            else:
+                velocities = [0]
+            
+            # Calculate acceleration based on the velocities
+            if len(velocities) > 1:
+                accelerations = [velocities[i+1] - velocities[i] for i in range(len(velocities)-1)]
+            else:
+                accelerations = [0]
+            
+            # Check if the entity is accelerating towards the emitter based on the last 5 distances
+            # and if the current distance is the smallest so far
+            if len(accelerations) > 0 and accelerations[-1] > 0 and current_distance == min(self.last_five_distances):
+                # print(f'Entity is accelerating towards the emitter: {current_distance}')
+                return 1
+            else:
+                return 0
+            
 
         def move_response(self, distance, angle):
             self.x += np.cos(self.angle + angle) * distance
@@ -214,7 +252,7 @@ class OlfactoryEntity:
                 self.left_turn(self.response_angle * output[0], self.movement_counter * output[0])
                 self.wiggle_phase += self.tail_wiggle_speed * output[0]
             if (output[1] == 1) and (output[2] == 1):
-                print('D-D-D-DOUBLE SPEEEED')
+                # print('D-D-D-DOUBLE SPEEEED')
                 self.straight_ahead(self.movement_counter)
                 self.wiggle_phase += self.tail_wiggle_speed
                 self.straight_ahead(self.movement_counter)
@@ -245,6 +283,16 @@ class OlfactoryEntity:
             
 
         def update(self, red_particles, emitter):
+
+            # reward_signal = self.homing_radar(emitter)
+
+            # if reward_signal == 1:
+            #     learning_signal = 10
+            #     Network.modify_learning(self.network, learning_signal)
+            # elif reward_signal == 0:
+            #     learning_signal = -10
+            #     Network.modify_learning(self.network, learning_signal)
+            #     # print('BEEPBEEPBEP')
             
             self.spikes = [0,0,0,0,0,0]
 

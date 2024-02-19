@@ -24,15 +24,19 @@ def spawn():
 
     architecture, depth = random_architecture()
 
+    # architecture = [10, 20, 30, 20, 16, 8, 4]
+    # depth = 6
+
     weights = initialise_weights(architecture)
 
     learning_rate = np.random.uniform(0.1, 2) / 10000
+    # learning_rate = 0.0001
 
-    # eligibility_decay = np.random.uniform(0.5,0.99)
-    eligibility_decay = 1
+    eligibility_decay = np.random.uniform(0.5,0.99)
+    # eligibility_decay = 0.95
 
     ltp_rate = np.random.uniform(0.1, 5) / 1000
-    ltd_rate = np.random.uniform(0.1, 5) / 1000
+    ltd_rate = np.random.uniform(0.1, 5) / 10000
 
     parameters = []
 
@@ -70,21 +74,23 @@ def initialise_weights(dimensions):
     return weights
 
 def add_recurrence(weights, dimensions):
-    recurrence = False
-    layer = None
+    recurrent_layers = []
+    probability = 0.8
     for i, _ in enumerate(dimensions[1:-1]):
-        if not recurrence:
-            if np.random.uniform(0, 1) < 0.3:
-                recurrence = True
-                layer = i + 1
+        if np.random.uniform(0, 1) < probability:
+            layer = i + 1
+            recurrent_layers.append(layer)
 
-                for n in range(dimensions[layer]):
-                    weight = np.random.normal(0, 1)
-                    weights[f'l{layer}-n{n}_rec'] = weight
-                    # print(f'Added recurrence weight {weight} to neuron {n} in layer {layer}')
-                break
+            for n in range(dimensions[layer]):
+                weight = np.random.normal(0, 1)
+                weights[f'l{layer}-n{n}_rec'] = weight
+                # print(f'Added recurrence weight {weight} to neuron {n} in layer {layer}')
+
+            probability /= 2  # Halve the probability of adding another layer
+        else:
+            break
                 
-    return weights, layer
+    return weights, recurrent_layers
 
 def init_population(size):
     pop = []
@@ -145,25 +151,25 @@ def reproduction(mother, father, mutation_rate):
             # mutated_weights = weights_mutation(mother[5])
             # mutated_child.append(mutated_weights)
             mutated_child.append(mother[5])
-            print(mother[6])
+            # print(mother[6])
             mutated_child.append(mother[6])
-            print(mother[7])
+            # print(mother[7])
             mutated_child.append(mother[7])
-            print(mother[8])
+            # print(mother[8])
             mutated_child.append(mother[8])
-            print(mother[9])
+            # print(mother[9])
             mutated_child.append(mother[9])
         else:
             # mutated_weights = weights_mutation(father[5])
             # mutated_child.append(mutated_weights)
             mutated_child.append(father[5])
-            print(father[6])
+            # print(father[6])
             mutated_child.append(father[6])
-            print(father[7])
+            # print(father[7])
             mutated_child.append(father[7])
-            print(father[8])
+            # print(father[8])
             mutated_child.append(father[8])
-            print(father[9])
+            # print(father[9])
             mutated_child.append(father[9])
         
         mutated_progeny.append(mutated_child)
@@ -178,7 +184,7 @@ def reproduction(mother, father, mutation_rate):
 #     return child_weights
 
 def weights_mutation(weights):
-    mutation_rate = 0.1
+    mutation_rate = 0.01
     mutation_strength = 0.001
     new_weights = copy.deepcopy(weights)
     for key in new_weights:
@@ -187,3 +193,20 @@ def weights_mutation(weights):
             new_weights[key] += mutation
             new_weights[key] = min(max(new_weights[key], 0), 1)
     return new_weights
+
+def neural_reproduction(individual, offspring):
+    # Initialise the population, add elite
+    progeny = []
+    progeny.append(individual)
+
+    for i in range(offspring - 1):
+        print(f'Generating offspring {i + 1}')
+
+        # Create a new individual
+        new_individual = copy.deepcopy(individual)
+
+        # Mutate the new individual
+        new_individual[5] = weights_mutation(new_individual[5])
+        progeny.append(new_individual)
+
+    return progeny

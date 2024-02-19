@@ -12,8 +12,8 @@ class Neuron:
         # STDP
         self.last_sent = None
         self.last_received = {}
-        self.ltp_rate = 0.01
-        self.ltd_rate = 0.001
+        self.ltp_rate = 0.1
+        self.ltd_rate = 0.01
         
         # WEIGHTS
         self.weights = {}
@@ -81,7 +81,7 @@ class Neuron:
                 weight_change = -self.learning_rate * np.exp(-abs(time_difference) / self.ltd_rate)
 
             self.weights[key] += weight_change
-            self.weights[key] = np.clip(self.weights[key], -1, 1)  
+            # self.weights[key] = np.clip(self.weights[key], -1, 1)  
 
     def send_spike(self):
         if self.neuron_type == 'output':
@@ -204,7 +204,7 @@ class Network:
         self.recurrent_layer = recurrence
 
         self.global_signal = 0
-        self.signal_decay = 0.6
+        self.signal_decay = 0.5
         self.absence_decay = 0.95
 
         self.frequency_counter = 1
@@ -282,6 +282,8 @@ class Network:
     def propagate_spike(self, spikes, count):
         self.network_decay()
 
+
+
         for i, spike in enumerate(spikes):
             if i < 4:
                 input_neuron = self.get_layer(0).neurons[i]
@@ -289,24 +291,32 @@ class Network:
                     input_neuron.input_spike(1)
                     self.frequency_counter += 0.5
                     self.absence_counter *= 0.95
-                    print(f'Frequency counter: {self.frequency_counter}')
-                    print(f'Particle counter: {count}')
+                    # print(f'Frequency counter: {self.frequency_counter}')
+                    # print(f'Particle counter: {count}')
 
                     reward = math.sqrt(self.frequency_counter)
                     # print(count, self.frequency_counter, reward, self.global_signal)
-                    self.global_signal += reward / 1000
+                    self.global_signal += reward / 800
                 elif spike == 0:
                     input_neuron = self.get_layer(0).neurons[i+4]
                     input_neuron.input_spike(0.5)
                     self.absence_counter += 0.5
 
                     punishment = math.sqrt(self.absence_counter)
-                    self.global_signal -= punishment / 1000
+                    self.global_signal -= punishment / 800
                     # print(self.global_signal)
-            elif i >= 4:
-                input_neuron = self.get_layer(0).neurons[i+4]
-                input_neuron.input_spike(1)
-                self.global_signal += 2
+            elif i == 4:
+                if spike == 1:
+                    input_neuron = self.get_layer(0).neurons[i+4]
+                    input_neuron.input_spike(1)
+                    self.global_signal += 10
+                    print(f'TAP TAP TAP')
+            elif i == 5:
+                if spike == 1:
+                    input_neuron = self.get_layer(0).neurons[i+4]
+                    input_neuron.input_spike(1)
+                    self.global_signal += 10
+                    print(f'TAP TAP TAP')
     
         
         for layer in self.layers:
@@ -315,7 +325,8 @@ class Network:
 
         normalized_eligibility = self.normalise_eligibility()
         if normalized_eligibility == False:
-            print("No normalization performed. Skipping weight updates.")
+            # print("No normalization performed. Skipping weight updates.")
+            pass
         else:
             for layer in self.layers:
                 for neuron in layer.neurons:
@@ -336,11 +347,11 @@ class Network:
                 spiked = True
             else:
                 output[int(neuron.id[-1])] = round(neuron.membrane_potential, 2)
-        if spiked == True:
-            if self.print_counter > 50:
-                print(f'Action potentials: {output}')
-                self.print_counter = 0
-            self.print_counter += 1
+        # if spiked == True:
+        #     if self.print_counter > 100:
+        #         # print(f'Action potentials: {output}')
+        #         self.print_counter = 0
+        #     self.print_counter += 1
 
         # ACTIONS BY MEMBRANE POTENTIAL INSTEAD OF SPIKES
         
@@ -362,12 +373,13 @@ class Network:
     def start_trial(self):
         start_counter = 0
             
-        print(self.global_signal)
+        # print(self.global_signal)
         while start_counter < 10:
             if self.global_signal != 0:
                 normalized_eligibility = self.normalise_eligibility()
                 if normalized_eligibility == False:
-                    print("No normalization performed. Skipping weight updates.")
+                    # print("No normalization performed. Skipping weight updates.")
+                    pass
                 else:
                     for layer in self.layers:
                         for neuron in layer.neurons:
@@ -391,7 +403,7 @@ class Network:
         total_eligibility = sum(sum(neuron.eligibility.values()) for layer in self.layers for neuron in layer.neurons)
         normalized_eligibility = {}
         if total_eligibility == 0:
-            print("Total eligibility is zero. Normalization not performed.")
+            # print("Total eligibility is zero. Normalization not performed.")
             normalized_eligibility = False
             return normalized_eligibility
         for layer in self.layers:
