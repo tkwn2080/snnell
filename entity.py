@@ -9,7 +9,7 @@ class OlfactoryEntity:
             self.speed = speed
             self.size = 12
             self.angle = 0
-            # self.angle = np.random.uniform(0, 2*np.pi)  # Entity's facing angle, where 0 is facing to the right and the angle is randomly initialized
+            # self.angle = np.random.uniform(-np.pi/4, np.pi/4)
             self.prong_length = length
             self.prong_thickness = 3
             self.prong_angle = probe_angle

@@ -1,12 +1,16 @@
 import numpy as np
 from collections import deque
-import pygame
 import sys
 import time
 import csv
+import os
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
+import pygame
 
 from entity import OlfactoryEntity
 from snn import Network
+
+simulation_length = 30000
 
 def collate_genotype(genotype):
     genotype_str = f"Learning Rate: {genotype[8][0]}, Eligibility Decay: {genotype[8][1]}, Recurrent Layer: {genotype[9]}"
@@ -59,28 +63,29 @@ def calculate_distance(emitter_x, emitter_y, final_x, final_y, individual_name):
         is_record = True
     else:
         is_record = False
+
+    # Set record flag to false, avoids rewards for closest here
+    is_record = False
     
     return scaled_distance, is_record
 
-def run_simulation(genotype, current_trial, total_trials, current_candidate, total_candidates, current_epoch, num_epochs, network, individual_name, headless):
+def run_simulation(genotype, current_trial, total_trials, current_candidate, total_candidates, current_epoch, num_epochs, network, individual_name, headless, screen, clock, time):
     if not headless:
         pygame.init()
-        screen = pygame.display.set_mode((1200, 800), pygame.DOUBLEBUF | pygame.HWSURFACE)
-        clock = pygame.time.Clock()
+        screen = screen
+        clock = clock
+        time = time
         print('HEAD')
 
-    clock = SimpleClock(180) if headless else clock
-
-    
-
-
-
+    if headless and screen is None and clock is None and time is None:
+        clock = SimpleClock(180)
+        time = clock
 
     global reward_signal
     network = network
 
-    white_particle_rate = 2  # How many white particles to emit per frame
-    red_particle_rate = 1  # How many red particles to emit per frame once started
+    white_particle_rate = 3  # How many white particles to emit per frame
+    red_particle_rate = 2  # How many red particles to emit per frame once started
 
     length = genotype[0]
     probe_angle = genotype[1]
@@ -130,8 +135,6 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
                         particle[2], other_particle[2] = other_particle[2], particle[2]  # Exchange x velocities
                         particle[3], other_particle[3] = other_particle[3], particle[3]  # Exchange y velocities
 
-
-
     def check_collision(p1, p2):
         # Calculate distance between two particles
         dist = np.hypot(p1[0] - p2[0], p1[1] - p2[1])
@@ -154,8 +157,6 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
             grid[grid_y][grid_x].remove(particle)
         except (IndexError, ValueError):
             pass  # Fail silently if the particle is not in the expected grid cell
-
-
 
     def update_particle(particle, grid):
         # Remove particle from its current grid cell
@@ -195,7 +196,6 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
         
         return entity_emitter_collision or probe_emitter_collision
 
-
     def emit_red_particles():
         # Emit red particles from around the circumference of the larger sphere
         angle = np.random.rand() * 2 * np.pi  # Random angle for emission
@@ -210,8 +210,8 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
         red_particles.append(new_particle)
         add_to_grid(new_particle, grid)  # Add the new particle to the grid
 
-    simulation_start_time = clock.get_ticks()  # Get the start time of the simulation
-    simulation_time_limit = 45000  # Set a time limit for the simulation (in milliseconds)
+    simulation_start_time = time.get_ticks()  # Get the start time of the simulation
+    simulation_time_limit = 30000  # Set a time limit for the simulation (in milliseconds)
     opening_countdown = 0  # Countdown to the opening of the prongs
 
     olfactory_entity = OlfactoryEntity(100, 400, length, probe_angle, response_angle, distance, speed, network)
@@ -221,7 +221,7 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
 
     # Simulation loop for the current genotype
     while True:
-        current_time = clock.get_ticks()
+        current_time = time.get_ticks()
         if current_time - simulation_start_time > simulation_time_limit:
             
             # Punish the entity for not finding the emitter in time
@@ -229,14 +229,14 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
             distance, is_record = calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y, individual_name)
             if is_record == True:
                 reward_signal += 50
-                print(f'Reward for closest distance: {distance}.')
+                # print(f'Reward for closest distance: {distance}.')
             else: 
                 if olfactory_entity.particle_count != 0:
                     punishment = (100 * distance / (olfactory_entity.particle_count / 10))
                 else:
                     punishment = 100 * distance
                 reward_signal -= punishment
-                print(f'Punishment for not finding the emitter in time: {punishment}. Ending simulation.')
+                # print(f'Punishment for not finding the emitter in time: {punishment}. Ending simulation.')
             Network.modify_learning(network, reward_signal)
 
             break  # Exit the simulation loop after the time limit
@@ -256,51 +256,25 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
             distance, is_record = calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y, individual_name)
             if is_record == True:
                 reward_signal += 50
-                print(f'Reward for closest distance: {distance}.')
+                # print(f'Reward for closest distance: {distance}.')
             else: 
                 if olfactory_entity.particle_count != 0:
                     punishment = (100 * distance / (olfactory_entity.particle_count / 10))
                 else:
                     punishment = 100 * distance
-                print(f"Punishment for going out of bounds: {punishment}. Ending simulation.")
+                # print(f"Punishment for going out of bounds: {punishment}. Ending simulation.")
                 reward_signal -= punishment
             Network.modify_learning(network, reward_signal)
             return {
                 'collided': False,
                 'collision_time': None,
                 'final_position': (olfactory_entity.x, olfactory_entity.y),
-                'simulation_time': clock.get_ticks() - simulation_start_time,  # Total simulation time
+                'simulation_time': time.get_ticks() - simulation_start_time,  # Total simulation time
                 'emitter_position': (emitter_x, emitter_y),
                 'emitter_radius': emitter_radius,
                 'particle_count': olfactory_entity.particle_count
             }
 
-        # for event in pygame.event.get():
-        #     if event.type == pygame.QUIT:
-        #         filename = time.strftime("%d%m%Y%H") + '_individual_data.csv'
-        #         csv_filename = './records/' + filename
-        #         with open(csv_filename, 'w', newline='') as csvfile:
-        #             fieldnames = ['name', 'genotype', 'fitness', 'heritage', 'epoch', 'genotype', 'weights']
-        #             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
-        #             writer.writeheader()
-        #             for individual_name, data in individual_data.items():
-        #                 collated_genotype, collated_weights = collate_genotype(data['genotype'])
-        #                 writer.writerow({
-        #                     'name': individual_name,
-        #                     'fitness': data['fitness'],
-        #                     'heritage': data['heritage'],
-        #                     'epoch': data['epoch'],
-        #                     'genotype': collated_genotype,
-        #                     'weights': collated_weights
-        #                 })
-        #         print(f"Individual data exported to {csv_filename}.")
-        #         pygame.quit()
-        #         sys.exit()
-
-        # Simulation logic (particle movement, drawing, etc.) goes here
-        # Make sure to update the screen with pygame.display.flip() and limit the frame rate with clock.tick()
-    
         # Clear screen
         if not headless:
             screen.fill((0, 0, 0))
@@ -316,7 +290,7 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
         emit_white_particles(white_particle_rate)  # Emit n white particles per frame
 
         # Get current time
-        current_time = clock.get_ticks()
+        current_time = time.get_ticks()
 
         # If the emission start time is not set and the delay has passed, start emitting red particles
         if red_particle_emission_start_time is None and current_time > red_particle_emission_delay:
@@ -332,18 +306,18 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
         if not olfactory_entity.collided_with_emitter:  # Check only if collision hasn't occurred yet
             if check_collision_with_emitter(olfactory_entity.x, olfactory_entity.y, emitter_x, emitter_y, olfactory_entity.size, emitter_radius, olfactory_entity.prong_length, olfactory_entity.prong_angle):
                 olfactory_entity.collided_with_emitter = True
-                olfactory_entity.collision_time = clock.get_ticks() - simulation_start_time
+                olfactory_entity.collision_time = time.get_ticks() - simulation_start_time
                 
                 # Reward the entity for finding the emitter
                 reward_signal += 100
                 Network.modify_learning(network, reward_signal)
                 
-                print("Collision with emitter at time:", olfactory_entity.collision_time)
+                # print("Collision with emitter at time:", olfactory_entity.collision_time)
                 return {
-                    'collided': False,
-                    'collision_time': None,
+                    'collided': True,
+                    'collision_time': olfactory_entity.collision_time,
                     'final_position': (olfactory_entity.x, olfactory_entity.y),
-                    'simulation_time': clock.get_ticks() - simulation_start_time,  # Total simulation time
+                    'simulation_time': time.get_ticks() - simulation_start_time,  # Total simulation time
                     'emitter_position': (emitter_x, emitter_y),
                     'emitter_radius': emitter_radius,
                     'particle_count': olfactory_entity.particle_count
@@ -357,20 +331,20 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
                 distance, is_record = calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y, individual_name)
                 if is_record == True:
                     reward_signal += 50
-                    print(f'Reward for closest distance: {distance}.')
+                    # print(f'Reward for closest distance: {distance}.')
                 else: 
                     if olfactory_entity.particle_count != 0:
                         punishment = (100 * distance / (olfactory_entity.particle_count / 10))
                     else:
                         punishment = 100 * distance
                     reward_signal -= punishment
-                    print(f"Punishment for getting lost: {punishment}. Ending simulation.")
+                    # print(f"Punishment for getting lost: {punishment}. Ending simulation.")
 
                 return {
                     'collided': False,
                     'collision_time': None,
                     'final_position': (olfactory_entity.x, olfactory_entity.y),
-                    'simulation_time': clock.get_ticks() - simulation_start_time,  # Total simulation time
+                    'simulation_time': time.get_ticks() - simulation_start_time,  # Total simulation time
                     'emitter_position': (emitter_x, emitter_y),
                     'emitter_radius': emitter_radius,
                     'particle_count': olfactory_entity.particle_count
@@ -409,9 +383,6 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
                 if not headless:
                     pygame.draw.circle(screen, (255, 0, 0), (int(particle[0]), int(particle[1])), particle_radius)
         red_particles = temp_red_particles  # Replace the original deque with the updated one
-
-
-
 
         if current_time - simulation_start_time > entity_start_time:
             if first_draw == True:
@@ -452,13 +423,13 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
             screen.blit(recurrent_layer_surface, (10, screen.get_height() - 30))
 
             pygame.display.flip()
-            clock.tick(180)  # Limit to 60 frames per second
+            clock.tick(120)  # Limit to 60 frames per second
 
     return {
         'collided': olfactory_entity.collided_with_emitter,
         'collision_time': olfactory_entity.collision_time if olfactory_entity.collided_with_emitter else None,
         'final_position': (olfactory_entity.x, olfactory_entity.y),
-        'simulation_time': clock.get_ticks() - simulation_start_time,  # Total simulation time
+        'simulation_time': time.get_ticks() - simulation_start_time,  # Total simulation time
         'emitter_position': (emitter_x, emitter_y),
         'emitter_radius': emitter_radius,
         'particle_count': olfactory_entity.particle_count

@@ -56,9 +56,9 @@ def random_architecture():
     output_layer = 4
     architecture = []
     architecture.append(input_layer)
-    hidden_depth = np.random.randint(2,4)
+    hidden_depth = np.random.randint(2,6)
     for i in range(hidden_depth):
-        hidden_breadth = np.random.randint(8,16)
+        hidden_breadth = np.random.randint(10,20)
         architecture.append(hidden_breadth)
     architecture.append(output_layer)
     print(architecture)
@@ -183,21 +183,23 @@ def reproduction(mother, father, mutation_rate):
 #         child_weights[key] = np.random.choice([mother_weights[key], father_weights[key]])
 #     return child_weights
 
-def weights_mutation(weights):
-    mutation_rate = 0.01
-    mutation_strength = 0.001
+def weights_mutation(weights, mutation_strength):
+    mutation_rate = 0.5
     new_weights = copy.deepcopy(weights)
     for key in new_weights:
         if np.random.uniform(0, 1) < mutation_rate:
             mutation = np.random.uniform(-mutation_strength, mutation_strength)
             new_weights[key] += mutation
-            new_weights[key] = min(max(new_weights[key], 0), 1)
     return new_weights
 
-def neural_reproduction(individual, offspring):
+def neural_reproduction(individual, offspring, epoch, num_epochs):
     # Initialise the population, add elite
     progeny = []
     progeny.append(individual)
+
+    # Determine mutation strength for epoch
+    # Starts at 0.01, ends (per num_epochs) at 0.001
+    mutation_strength = 0.01 - (0.009 * (epoch / num_epochs))
 
     for i in range(offspring - 1):
         print(f'Generating offspring {i + 1}')
@@ -206,7 +208,7 @@ def neural_reproduction(individual, offspring):
         new_individual = copy.deepcopy(individual)
 
         # Mutate the new individual
-        new_individual[5] = weights_mutation(new_individual[5])
+        new_individual[5] = weights_mutation(new_individual[5], mutation_strength)
         progeny.append(new_individual)
 
     return progeny

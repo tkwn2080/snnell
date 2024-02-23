@@ -310,13 +310,13 @@ class Network:
                     input_neuron = self.get_layer(0).neurons[i+4]
                     input_neuron.input_spike(1)
                     self.global_signal += 10
-                    print(f'TAP TAP TAP')
+                    # print(f'TAP TAP TAP')
             elif i == 5:
                 if spike == 1:
                     input_neuron = self.get_layer(0).neurons[i+4]
                     input_neuron.input_spike(1)
                     self.global_signal += 10
-                    print(f'TAP TAP TAP')
+                    # print(f'TAP TAP TAP')
     
         
         for layer in self.layers:
