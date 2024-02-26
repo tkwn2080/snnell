@@ -215,6 +215,7 @@ class Network:
         self.learning_rate = parameters[0]
         self.eligibility_decay = parameters[1]
 
+        depth = int(depth)
         layer_types = ['input'] + ['hidden'] * (depth - 1) + ['output']
 
         for i, size in enumerate(architecture):

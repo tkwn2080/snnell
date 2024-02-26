@@ -70,12 +70,12 @@ def calculate_distance(emitter_x, emitter_y, final_x, final_y, individual_name):
     return scaled_distance, is_record
 
 def run_simulation(genotype, current_trial, total_trials, current_candidate, total_candidates, current_epoch, num_epochs, network, individual_name, headless, screen, clock, time):
-    if not headless:
-        pygame.init()
-        screen = screen
-        clock = clock
-        time = time
-        print('HEAD')
+    # if not headless:
+    #     pygame.init()
+    #     screen = screen
+    #     clock = clock
+    #     time = time
+    #     print('HEAD')
 
     if headless and screen is None and clock is None and time is None:
         clock = SimpleClock(180)
@@ -111,7 +111,6 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
     red_particle_emission_delay = 0  # Delay in milliseconds (2000ms = 2s)
     red_particle_emission_start_time = None  # Start time will be set after 2 seconds
 
-
     # Spatial partitioning setup
     grid_size = 50  # Define the size of the grid cells
     if not headless:
@@ -121,7 +120,6 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
         num_grid_rows = 800 // grid_size
         num_grid_cols = 1200 // grid_size
     grid = [[deque() for _ in range(num_grid_cols)] for _ in range(num_grid_rows)]  # Grid initialized with deques
-
 
     # PARTICLE PHYSICS
     def check_collisions_in_grid(particle, grid):
@@ -178,7 +176,14 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
     # emitter_x = 900  # Keep the towards the right side
     # emitter_y = 200  # Vertical middle of the screen
     emitter_x = np.random.randint(900, 1100)  # Randomly vary the x-coordinate
-    emitter_y = np.random.randint(200, 600)  # Randomly vary the y-coordinate
+    if np.random.rand() < 0.5:
+        emitter_y = np.random.randint(150, 300)
+    else:
+        emitter_y = np.random.randint(300, 650)
+
+    # emitter_y = np.random.randint(200, 600)  # Randomly vary the y-coordinate
+        
+
     emitter_radius = 10  # Radius of the larger sphere
 
     emitter = [emitter_x, emitter_y]
@@ -221,6 +226,13 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
 
     # Simulation loop for the current genotype
     while True:
+        if not headless:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+
+
         current_time = time.get_ticks()
         if current_time - simulation_start_time > simulation_time_limit:
             

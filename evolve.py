@@ -4,7 +4,7 @@ import copy
 def spawn():
     # self.prong_length = length
     # length = np.random.uniform(40, 100)
-    length = 60
+    length = 120
 
     # self.prong_angle = probe_angle
     # probe_angle = np.random.uniform(15, 75) * (np.pi / 180)
@@ -175,16 +175,16 @@ def reproduction(mother, father, mutation_rate):
         mutated_progeny.append(mutated_child)
     return mutated_progeny
 
-# def weights_reproduction(mother, father):
-#     mother_weights = mother[5]
-#     father_weights = father[5]
-#     child_weights = {}
-#     for key in mother_weights:
-#         child_weights[key] = np.random.choice([mother_weights[key], father_weights[key]])
-#     return child_weights
+def weights_reproduction(mother, father):
+    mother_weights = mother[5]
+    father_weights = father[5]
+    child_weights = {}
+    for key in mother_weights:
+        child_weights[key] = np.random.choice([mother_weights[key], father_weights[key]])
+    return child_weights
 
 def weights_mutation(weights, mutation_strength):
-    mutation_rate = 0.5
+    mutation_rate = 0.7
     new_weights = copy.deepcopy(weights)
     for key in new_weights:
         if np.random.uniform(0, 1) < mutation_rate:
@@ -199,7 +199,7 @@ def neural_reproduction(individual, offspring, epoch, num_epochs):
 
     # Determine mutation strength for epoch
     # Starts at 0.01, ends (per num_epochs) at 0.001
-    mutation_strength = 0.01 - (0.009 * (epoch / num_epochs))
+    mutation_strength = 0.1 - (0.009 * (epoch / num_epochs))
 
     for i in range(offspring - 1):
         print(f'Generating offspring {i + 1}')

@@ -1,6 +1,5 @@
 import sys
 import numpy as np
-from collections import deque
 import random
 import string
 import csv
@@ -8,6 +7,9 @@ import time
 import os
 from tqdm import tqdm
 import pygame
+import pandas as pd
+import ast
+import re
 # os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
 
 from evolve import init_population, neural_reproduction
@@ -67,44 +69,78 @@ def trial_csv(trial_data):
 def calculate_fitness(simulation_data, time_limit=30000):
     emitter_x, emitter_y = simulation_data['emitter_position']
     if simulation_data['collided']:
-        simulation_time = simulation_data['collision_time']
+        collision_time = simulation_data['collision_time']
         particle_count = simulation_data['particle_count'] / 10
-        return simulation_time / particle_count
+        return collision_time / particle_count
     else:
         final_x, final_y = simulation_data['final_position']
+        simulation_time = simulation_data['simulation_time']
         final_distance = np.hypot(final_x - emitter_x, final_y - emitter_y)
-        return final_distance * 10
-
-    # # If the entity collided, fitness is the time until collision
-    # if simulation_data['collided']:
-    #     simulation_time = simulation_data['collision_time']
-    #     particle_count = simulation_data['particle_count'] / 10
-    #     if particle_count == 0:
-    #         return time_limit
-    #     if particle_count > 0:
-    #         return simulation_time / particle_count
-    #     # return 0
-    # else:
-    #     # If the entity did not collide, calculate the final distance from the emitter
-    #     final_x, final_y = simulation_data['final_position']
-    #     particle_count = simulation_data['particle_count'] / 10
-    #     final_distance = np.hypot(final_x - emitter_x, final_y - emitter_y) * 100
-    #     # Add the time limit to the distance to ensure distance-based fitness
-    #     # always exceeds time-based fitness and place them on a single continuum
-    #     if particle_count == 0:
-    #         return time_limit + (final_distance * 10)
-    #     if particle_count > 0:
-    #         return (time_limit + (final_distance * 10)) / (particle_count / 10)
-        
-
-
-        
+        return simulation_time + final_distance * 10
+  
 def generate_random_name(length=6):
     letters = string.ascii_lowercase
     return ''.join(random.choice(letters) for i in range(length))
 
-
 # SIMULATION
+def retrieve_population(source, selection):
+    df = pd.read_csv(source)
+
+    last_epoch = df['epoch'].max()
+    df_last_epoch = df[df['epoch'] == last_epoch]
+
+    df_sorted = df_last_epoch.sort_values(by='fitness', ascending=False)
+    
+    top_n = df_sorted.head(selection)
+    
+    results = top_n[['name', 'weights', 'recurrent_layer', 'learning_rate', 'eligibility_decay']]
+
+    output = []
+
+    length = 80
+    probe_angle = 55 * (np.pi / 180)
+    response_angle = 3 * (np.pi / 180)
+    distance = 3
+    speed = 3
+
+    for index, row in results.iterrows():
+        architecture, depth = interpret_weights(row['weights'])
+        weights = ast.literal_eval(row['weights'])
+
+        new_output = [length, probe_angle, response_angle, distance, speed]
+        # print(df.columns)
+        parameters = [row['learning_rate'], row['eligibility_decay']]
+        name = row['name']
+        new_output.extend([weights, architecture, depth, parameters, row['recurrent_layer'], name])
+        output.append(new_output)
+    
+    return output
+
+def interpret_weights(weights_str):
+    weights = ast.literal_eval(weights_str)
+    
+    neurons_per_layer = {}
+
+    for key in weights.keys():
+        if '_rec' in key:
+            layer = int(re.search(r'l(\d+)', key).group(1))
+            neurons_per_layer.setdefault(layer, 0)
+        else:
+            pre, post = key.split('_')[0:2]
+            layer_pre = int(re.search(r'l(\d+)', pre).group(1))
+            neuron_pre = int(re.search(r'n(\d+)', pre).group(1))
+            layer_post = int(re.search(r'l(\d+)', post).group(1))
+            neuron_post = int(re.search(r'n(\d+)', post).group(1))
+            
+            neurons_per_layer.setdefault(layer_pre, 0)
+            neurons_per_layer[layer_pre] = max(neurons_per_layer[layer_pre], neuron_pre + 1)
+            neurons_per_layer.setdefault(layer_post, 0)
+            neurons_per_layer[layer_post] = max(neurons_per_layer[layer_post], neuron_post + 1)
+    
+    total_layers = len(neurons_per_layer)
+    architecture = [neurons_per_layer[layer] for layer in sorted(neurons_per_layer)]
+    
+    return architecture, total_layers
 
 def simulate_individual(individual, population_index, population_size, epoch, num_epochs, num_trials, headless, screen, clock, time):
     if epoch == 0:
@@ -118,6 +154,8 @@ def simulate_individual(individual, population_index, population_size, epoch, nu
 
     # Initiate network
     weights, architecture, depth, parameters, recurrence = individual[5:10]
+    # print(weights)
+    print(f"Architecture: {architecture}, Depth: {depth}, Parameters: {parameters}, Recurrence: {recurrence}")
     network = Network(architecture, depth, parameters, recurrence)
     network.construct(weights, parameters)
 
@@ -212,17 +250,39 @@ def evolutionary_system(population, selection, progeny, epoch, num_epochs, num_t
 
 def main():
 
+    mode = 'continue'
+
+    # Set headless to True to run without visualisation
     headless = True
+
+    # Set number of processes to run in parallel
     processes = 7
+    
+    # If multiple processes are used, run headless
+    if processes > 1:
+        headless = True
+    else:
+        headless = False
 
-    num_epochs = 20
-    num_trials = 2
+    # Set number of generations
+    num_epochs = 60
 
+    # Set number of trials for each individual within a generation 
+    num_trials = 5
+
+    # Set initial population size
     population_size = 1000
-    selection = 20
+
+    # Set subsequent population dynamics
+    selection = 10
     progeny = 20
 
-    population = [init_population(1)[0] for _ in range(population_size)]
+    # Setup
+    if mode == 'new':
+        population = [init_population(1)[0] for _ in range(population_size)]
+    elif mode == 'continue':
+        source = 'records/24 Feb/epoch_data.csv'
+        population = retrieve_population(source, selection)
 
     if headless:
         screen = None
@@ -234,7 +294,7 @@ def main():
         clock = pygame.time.Clock()
         time = pygame.time
 
-
+    # Run
     for epoch in tqdm(range(num_epochs), desc="Epochs"):
         print(f"EPOCH {epoch+1}/{num_epochs}")
         if epoch == 0:
