@@ -54,7 +54,7 @@ def pull_weights(record_path, n=10):
     df_last_epoch = df[df['epoch'] == last_epoch]
     
     # Step 3: Sort by fitness in descending order
-    df_sorted = df_last_epoch.sort_values(by='fitness', ascending=False)
+    df_sorted = df_last_epoch.sort_values(by='fitness', ascending=True)
     
     # Step 4: Select top N rows
     top_n = df_sorted.head(n)
@@ -110,7 +110,7 @@ def simulate_individual(individual, population_index, population_size, epoch, nu
         print(f"Fitness: {fitness}")
 
 def main():
-
+    
     headless = False
     processes = 1
 

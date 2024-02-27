@@ -45,9 +45,9 @@ def spawn():
     parameters.append(ltp_rate)
     parameters.append(ltd_rate)
 
-    weights, recurrence = add_recurrence(weights, architecture)
+    weights, recurrence, recurrence_type = add_recurrence(weights, architecture)
 
-    genetic_code = [length, probe_angle, response_angle, distance, speed, weights, architecture, depth, parameters, recurrence]
+    genetic_code = [length, probe_angle, response_angle, distance, speed, weights, architecture, depth, parameters, recurrence, recurrence_type]
 
     return genetic_code
 
@@ -76,21 +76,75 @@ def initialise_weights(dimensions):
 def add_recurrence(weights, dimensions):
     recurrent_layers = []
     probability = 0.8
+
+    die = np.random.uniform(0, 3)
+    if die <= 1:
+        recurrence_type = 'self'
+    elif die <= 2:
+        recurrence_type = 'backward'
+    else:
+        recurrence_type = 'horizontal'
+
     for i, _ in enumerate(dimensions[1:-1]):
         if np.random.uniform(0, 1) < probability:
             layer = i + 1
-            recurrent_layers.append(layer)
 
             for n in range(dimensions[layer]):
-                weight = np.random.normal(0, 1)
-                weights[f'l{layer}-n{n}_rec'] = weight
-                # print(f'Added recurrence weight {weight} to neuron {n} in layer {layer}')
 
-            probability /= 2  # Halve the probability of adding another layer
+                weight = np.random.normal(0, 1)
+
+                if recurrence_type == 'self':
+                    # Adds self-recurrence to the selected layer
+                    identifier = f'l{layer}-n{n}_l{layer}-n{n}:recS'
+                    weights[identifier] = weight
+                    if not validate_identifier(identifier):
+                        print(f"Invalid identifier generated: {identifier}")
+                    if layer not in recurrent_layers:
+                        recurrent_layers.append(layer)
+
+
+                elif recurrence_type == 'backward':
+                    # Adds backward recurrence to the selected layer
+                    if layer >= 2:
+                        for j in range(dimensions[layer-1]):
+                            identifier = f'l{layer}-n{n}_l{layer-1}-n{j}:recB'
+                            weights[identifier] = weight
+                            if not validate_identifier(identifier):
+                                print(f"Invalid identifier generated: {identifier}")
+                            if layer not in recurrent_layers:
+                                recurrent_layers.append(layer)
+
+                elif recurrence_type == 'horizontal':
+                    # Adds horizontal recurrence to the same layer
+                    for j in range(dimensions[layer]):
+                        identifier = f'l{layer}-n{n}_l{layer}-n{j}'
+                        weights[identifier] = weight
+                        if not validate_identifier(identifier):
+                            print(f"Invalid identifier generated: {identifier}")
+                        if layer not in recurrent_layers:
+                            recurrent_layers.append(layer)
         else:
             break
-                
-    return weights, recurrent_layers
+
+    if len(recurrent_layers) >= 1:
+        print(f"Recurrence type: {recurrence_type}")
+        print(f"Recurrent layers: {recurrent_layers}")
+
+    return weights, recurrent_layers, recurrence_type
+
+def validate_identifier(identifier):
+    """Validates the format of the generated weight identifier."""
+    # This is a simple validation check. Adjust the logic according to the expected formats.
+    if ':' in identifier:
+        parts = identifier.split(':')
+        if not parts[0]:
+            return False
+    if '_' in identifier:
+        parts = identifier.split('_')
+        for part in parts:
+            if not part.startswith('l') or '-n' not in part:
+                return False
+    return True
 
 def init_population(size):
     pop = []
@@ -198,7 +252,7 @@ def neural_reproduction(individual, offspring, epoch, num_epochs):
     progeny.append(individual)
 
     # Determine mutation strength for epoch
-    # Starts at 0.01, ends (per num_epochs) at 0.001
+    # Starts at 0.1, ends (per num_epochs) at 0.01
     mutation_strength = 0.1 - (0.009 * (epoch / num_epochs))
 
     for i in range(offspring - 1):

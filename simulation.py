@@ -179,7 +179,7 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
     if np.random.rand() < 0.5:
         emitter_y = np.random.randint(150, 300)
     else:
-        emitter_y = np.random.randint(300, 650)
+        emitter_y = np.random.randint(500, 650)
 
     # emitter_y = np.random.randint(200, 600)  # Randomly vary the y-coordinate
         

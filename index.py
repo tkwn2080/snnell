@@ -32,7 +32,7 @@ def epoch_csv(epoch_data):
     epoch_csv_filename = './records/epoch_data.csv'
     write_header = not os.path.exists(epoch_csv_filename) or os.path.getsize(epoch_csv_filename) == 0
     with open(epoch_csv_filename, 'a', newline='') as csvfile:
-        fieldnames = ['epoch', 'name', 'fitness', 'architecture', 'recurrent_layer', 'learning_rate', 'eligibility_decay', 'heritage', 'weights']
+        fieldnames = ['epoch', 'name', 'fitness', 'architecture', 'recurrent_layer', 'recurrence_type', 'learning_rate', 'eligibility_decay', 'heritage', 'weights']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         
         if write_header:
@@ -46,10 +46,11 @@ def epoch_csv(epoch_data):
                 'fitness': data['avg_fitness'],
                 'architecture': individual[6],
                 'recurrent_layer': individual[9],
+                'recurrence_type': individual[10],
                 'learning_rate': individual[8][0],  # Assuming this is the structure; adjust if necessary
                 'eligibility_decay': individual[8][1],
                 'recurrent_layer': individual[9],
-                'heritage': individual[10],
+                'heritage': individual[11],
                 'weights': individual[5]
             })
     print(f"Appended data to {epoch_csv_filename}.")
@@ -89,15 +90,15 @@ def retrieve_population(source, selection):
     last_epoch = df['epoch'].max()
     df_last_epoch = df[df['epoch'] == last_epoch]
 
-    df_sorted = df_last_epoch.sort_values(by='fitness', ascending=False)
+    df_sorted = df_last_epoch.sort_values(by='fitness', ascending=True)
     
     top_n = df_sorted.head(selection)
     
-    results = top_n[['name', 'weights', 'recurrent_layer', 'learning_rate', 'eligibility_decay']]
+    results = top_n[['name', 'weights', 'recurrent_layer', 'recurrence_type', 'learning_rate', 'eligibility_decay']]
 
     output = []
 
-    length = 80
+    length = 120
     probe_angle = 55 * (np.pi / 180)
     response_angle = 3 * (np.pi / 180)
     distance = 3
@@ -111,7 +112,8 @@ def retrieve_population(source, selection):
         # print(df.columns)
         parameters = [row['learning_rate'], row['eligibility_decay']]
         name = row['name']
-        new_output.extend([weights, architecture, depth, parameters, row['recurrent_layer'], name])
+        print(f"Name: {name}")
+        new_output.extend([weights, architecture, depth, parameters, row['recurrent_layer'], row['recurrence_type'], name])
         output.append(new_output)
     
     return output
@@ -142,8 +144,8 @@ def interpret_weights(weights_str):
     
     return architecture, total_layers
 
-def simulate_individual(individual, population_index, population_size, epoch, num_epochs, num_trials, headless, screen, clock, time):
-    if epoch == 0:
+def simulate_individual(individual, population_index, population_size, epoch, num_epochs, num_trials, headless, screen, clock, time, mode):
+    if mode == 'new' and epoch == 0:
         individual_name = generate_random_name()
         individual.append(individual_name)
         # print(f"Candidate number {population_index + 1} of {population_size}: {individual_name}")
@@ -151,12 +153,15 @@ def simulate_individual(individual, population_index, population_size, epoch, nu
         individual_name = generate_random_name()
         individual[10] = individual[10] + " " + individual_name
         # print(f"Epoch {epoch + 1}, candidate number {population_index + 1} of {population_size}")
+    elif mode == 'continue':
+        individual_name = individual[10]
+        # print(f"Epoch {epoch + 1}, candidate number {population_index + 1} of {population_size}")
 
     # Initiate network
-    weights, architecture, depth, parameters, recurrence = individual[5:10]
+    weights, architecture, depth, parameters, recurrence, recurrence_type = individual[5:11]
     # print(weights)
-    print(f"Architecture: {architecture}, Depth: {depth}, Parameters: {parameters}, Recurrence: {recurrence}")
-    network = Network(architecture, depth, parameters, recurrence)
+    # print(f"Architecture: {architecture}, Depth: {depth}, Parameters: {parameters}, Recurrence: {recurrence}")
+    network = Network(architecture, depth, parameters, recurrence, recurrence_type)
     network.construct(weights, parameters)
 
     # Run trials and calculate average fitness
@@ -191,14 +196,14 @@ def simulate_individual(individual, population_index, population_size, epoch, nu
     updated_weights = network.retrieve_weights()
     return population_index, individual_name, updated_weights, avg_fitness, individual[10]
 
-def parallel_simulations(population, epoch, num_epochs, num_trials, num_processes, screen, clock, time):
+def parallel_simulations(population, epoch, num_epochs, num_trials, num_processes, screen, clock, time, mode):
     # Use ProcessPoolExecutor to run simulations in parallel
     try:
         with ProcessPoolExecutor(max_workers=num_processes) as executor:
             futures = []
             for index, individual in enumerate(population):
                 headless = True
-                futures.append(executor.submit(simulate_individual, individual, index, len(population), epoch, num_epochs, num_trials, headless, screen, clock, time))
+                futures.append(executor.submit(simulate_individual, individual, index, len(population), epoch, num_epochs, num_trials, headless, screen, clock, time, mode))
             
             epoch_data = []
             for future in concurrent.futures.as_completed(futures):
@@ -231,18 +236,21 @@ def breeding_program(population, reproduction_rate, epoch, num_epochs):
         new_population.extend(progeny)
     return new_population
 
-def evolutionary_system(population, selection, progeny, epoch, num_epochs, num_trials, processes, headless, screen, clock, time):
+def evolutionary_system(population, selection, progeny, epoch, num_epochs, num_trials, processes, headless, screen, clock, time, mode):
+    if mode == 'new' or epoch > 0:
+        if headless:
+            epoch_data = parallel_simulations(population, epoch, num_epochs, num_trials, processes, screen, clock, time, mode)
 
-    if headless:
-        epoch_data = parallel_simulations(population, epoch, num_epochs, num_trials, processes, screen, clock, time)
+        if not headless:
+            for i, individual in enumerate(population):
+                epoch_data = simulate_individual(individual, i, len(population), epoch, num_epochs, num_trials, headless, screen, clock, time, mode)
 
-    if not headless:
-        for i, individual in enumerate(population):
-            epoch_data = simulate_individual(individual, i, len(population), epoch, num_epochs, num_trials, headless, screen, clock, time)
+        epoch_csv(epoch_data)
 
-    epoch_csv(epoch_data)
-
-    survivors = artificial_selection(epoch_data, selection)
+        survivors = artificial_selection(epoch_data, selection)
+    
+    elif mode == 'continue':
+        survivors = population
 
     new_population = breeding_program(survivors, progeny, epoch, num_epochs)
 
@@ -250,7 +258,8 @@ def evolutionary_system(population, selection, progeny, epoch, num_epochs, num_t
 
 def main():
 
-    mode = 'continue'
+    # Whether to initialise a new population ('new') or continue from a previous run ('continue')
+    mode = 'new'
 
     # Set headless to True to run without visualisation
     headless = True
@@ -265,7 +274,7 @@ def main():
         headless = False
 
     # Set number of generations
-    num_epochs = 60
+    num_epochs = 25
 
     # Set number of trials for each individual within a generation 
     num_trials = 5
@@ -297,11 +306,12 @@ def main():
     # Run
     for epoch in tqdm(range(num_epochs), desc="Epochs"):
         print(f"EPOCH {epoch+1}/{num_epochs}")
-        if epoch == 0:
-            selection = 20
-        else:
-            selection = 10
-        population = evolutionary_system(population, selection, progeny, epoch, num_epochs, num_trials, processes, headless, screen, clock, time)
+        if mode == 'new':
+            if epoch == 0:
+                selection = 20
+            else:
+                selection = 10
+        population = evolutionary_system(population, selection, progeny, epoch, num_epochs, num_trials, processes, headless, screen, clock, time, mode)
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()

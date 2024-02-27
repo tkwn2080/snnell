@@ -139,16 +139,14 @@ class Neuron:
         if self.refractory_counter > 0:
             self.refractory_counter -= 1
 
-
         self.base_activity = absence_counter
 
         # if self.refractory_counter == 0:
         #     if self.neuron_type == 'hidden':
         #             self.intrinsic_activity()
 
-
 class Layer:
-    def __init__(self, index, size, layer_type, layer_variant):
+    def __init__(self, index, size, layer_type, layer_variant, recurrence_type):
         self.neurons = []
         self.index = index
         self.layer_type = layer_type
@@ -162,9 +160,8 @@ class Layer:
             self.neurons.append(Neuron(f'l{index}-n{i}', neuron_type))
 
             if self.layer_variant == 'recurrent':
-                self.connect_recurrent()
+                self.connect_recurrent(recurrence_type)
     
-
     def determine_neuron_type(self):
         if self.layer_type == 'input':
             return 'input'
@@ -178,9 +175,24 @@ class Layer:
             for j in range(len(next_layer.neurons)):
                 self.neurons[i].connect_to(next_layer.neurons[j])
 
-    def connect_recurrent(self):
-        for i in range(len(self.neurons)):
-            self.neurons[i].connect_to(self.neurons[i])
+    def connect_recurrent(self, type):
+
+        # If type = self-recurrent, connect neurons to themselves
+        if type == 'self':
+            for i in range(len(self.neurons)):
+                self.neurons[i].connect_to(self.neurons[i])
+        
+        # If type = backward, connect neurons to the previous layer
+        elif type == 'backward':
+            for i in range(len(self.neurons)):
+                self.neurons[i].connect_to(self.neurons[i].previous_layer_neuron)
+
+        # If type = horizontal, connect neurons to the same layer
+        elif type == 'horizontal':
+            for i in range(len(self.neurons)):
+                for j in range(len(self.neurons)):
+                    if i != j:
+                        self.neurons[i].connect_to(self.neurons[j])
 
     def initialise_weights(self, network):
         if self.index == 1:  # Skip the first layer as it has no previous layer
@@ -196,12 +208,13 @@ class Layer:
             neuron.set_weights(weights)
 
 class Network:
-    def __init__(self, architecture, depth, parameters, recurrence):
+    def __init__(self, architecture, depth, parameters, recurrence, recurrence_type):
         self.layers = []
         # Store references to the layers by their index for easy access
         self.layer_dict = {}
 
         self.recurrent_layer = recurrence
+        self.recurrence_type = recurrence_type
 
         self.global_signal = 0
         self.signal_decay = 0.5
@@ -224,7 +237,7 @@ class Network:
             else:
                 layer_variant = None
             layer_type = layer_types[min(i, len(layer_types) - 1)]
-            layer = Layer(i, size, layer_type, layer_variant)  # Use i instead of i + 1
+            layer = Layer(i, size, layer_type, layer_variant, self.recurrence_type)
             self.layers.append(layer)
             self.layer_dict[layer.index] = layer
 
@@ -244,21 +257,47 @@ class Network:
     def set_weights(self, weights, learning_rate, eligibility_decay):
         grouped_weights = {}
         for key, value in weights.items():
-            if '_rec' in key:
-                source_id = target_id = key.split('_rec')[0]
+            if ':rec' in key:
+                parts = key.split(':')
+                identifiers = parts[0]
+                connection_type = parts[1]
+
+                if connection_type == 'recS':
+                    # For self-recurrent connections, both source and target are the same neuron
+                    layer_neuron_id = identifiers.split('_')[0]  # Assuming the structure embeds before ':recS'
+                    source_id = target_id = layer_neuron_id
+                else:
+                    # For other recurrent connections, extract source and target based on type
+                    source_id, target_id = identifiers.split('_')
+                    if connection_type == 'recB':
+                        # For backward connections, logic remains as is if additional handling is needed
+                        pass
+                    elif connection_type == 'recH':
+                        # For horizontal connections, this might adjust if special handling is needed
+                        pass
+                    else:
+                        raise ValueError(f"Unsupported recurrent connection type: {connection_type}")
             else:
+                # Direct connections handling
                 source_id, target_id = key.split('_')
 
+            # Initialize target grouping if not present
             if target_id not in grouped_weights:
                 grouped_weights[target_id] = {}
             grouped_weights[target_id][source_id] = value
 
+        # Apply grouped weights to respective neurons
         for target_id, weights in grouped_weights.items():
-            target_layer_index, target_neuron_index = map(int, target_id[1:].split('-n'))
+            try:
+                target_layer_index, target_neuron_index = map(int, target_id[1:].split('-n'))
+            except ValueError:
+                raise ValueError(f"Error parsing target_id '{target_id}' from key '{key}'")
+
             target_neuron = self.layer_dict[target_layer_index].neurons[target_neuron_index]
             target_neuron.set_weights(weights)
             target_neuron.learning_rate = learning_rate
             target_neuron.eligibility_decay = eligibility_decay
+
 
     def set_recurrence(self, weights):
         for key, value in weights.items():
@@ -282,8 +321,6 @@ class Network:
     
     def propagate_spike(self, spikes, count):
         self.network_decay()
-
-
 
         for i, spike in enumerate(spikes):
             if i < 4:
