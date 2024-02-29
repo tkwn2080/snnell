@@ -47,13 +47,12 @@ def epoch_csv(epoch_data):
                 'architecture': individual[6],
                 'recurrent_layer': individual[9],
                 'recurrence_type': individual[10],
-                'learning_rate': individual[8][0],  # Assuming this is the structure; adjust if necessary
+                'learning_rate': individual[8][0], 
                 'eligibility_decay': individual[8][1],
                 'recurrent_layer': individual[9],
                 'heritage': individual[11],
                 'weights': individual[5]
             })
-    print(f"Appended data to {epoch_csv_filename}.")
 
 def trial_csv(trial_data):
     # trial_csv_filename = './records/' + time.strftime("%d%m%Y%H") + '_trial_data.csv'
@@ -151,10 +150,10 @@ def simulate_individual(individual, population_index, population_size, epoch, nu
         # print(f"Candidate number {population_index + 1} of {population_size}: {individual_name}")
     elif epoch > 0:
         individual_name = generate_random_name()
-        individual[10] = individual[10] + " " + individual_name
+        individual[11] = individual[11] + " " + individual_name
         # print(f"Epoch {epoch + 1}, candidate number {population_index + 1} of {population_size}")
     elif mode == 'continue':
-        individual_name = individual[10]
+        individual_name = individual[11]
         # print(f"Epoch {epoch + 1}, candidate number {population_index + 1} of {population_size}")
 
     # Initiate network
@@ -277,20 +276,20 @@ def main():
     num_epochs = 25
 
     # Set number of trials for each individual within a generation 
-    num_trials = 5
+    num_trials = 3
 
     # Set initial population size
     population_size = 1000
 
     # Set subsequent population dynamics
     selection = 10
-    progeny = 20
+    progeny = 10
 
     # Setup
     if mode == 'new':
         population = [init_population(1)[0] for _ in range(population_size)]
     elif mode == 'continue':
-        source = 'records/24 Feb/epoch_data.csv'
+        source = 'records/epoch_data.csv'
         population = retrieve_population(source, selection)
 
     if headless:

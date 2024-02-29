@@ -268,7 +268,11 @@ class Network:
                     source_id = target_id = layer_neuron_id
                 else:
                     # For other recurrent connections, extract source and target based on type
-                    source_id, target_id = identifiers.split('_')
+                    try:
+                        source_id, target_id = identifiers.split('_')
+                    except ValueError:
+                        raise ValueError(f"Error parsing source and target neuron IDs from key '{key}'")
+                    # source_id, target_id = identifiers.split('_')
                     if connection_type == 'recB':
                         # For backward connections, logic remains as is if additional handling is needed
                         pass
@@ -460,17 +464,28 @@ class Network:
 
     def retrieve_weights(self):
         weights = {}
-        for i in range(1, len(self.layers)):  # Skip the input layer
-            layer = self.layers[i]
+        for i, layer in enumerate(self.layers):
             for j, neuron in enumerate(layer.neurons):
+                neuron_id = f'l{i}-n{j}'
                 for source_id, weight in neuron.weights.items():
-                    # Extract the index of the source neuron from its id
-                    k = int(source_id.split('-n')[-1])
-                    if source_id == neuron.id:  # Check if the source neuron is the same as the current neuron
-                        weights[f'{neuron.id}_rec'] = weight  # Store the weight with the _rec suffix
-                    else:
-                        weights[f'l{i-1}-n{k}_l{i}-n{j}'] = weight
+                    # Determine the layer and neuron index of the source
+                    source_layer_index, source_neuron_index = map(int, source_id[1:].split('-n'))
+                    
+                    if source_id == neuron_id:  # Self-recurrent connection
+                        weights[f'{neuron_id}_{neuron_id}:recS'] = weight
+                    elif source_layer_index == i - 1:  # Connections from a previous layer
+                        # To distinguish between direct and backward-recurrent:
+                        weights[f'{source_id}_{neuron_id}'] = weight
+                    elif source_layer_index == i and source_neuron_index != j:  # Horizontal-recurrent (same layer, different neuron)
+                        weights[f'{source_id}_{neuron_id}:recH'] = weight
+
+                    elif source_layer_index == i + 1: # Direct connections to a next layer
+                        weights[f'{source_id}_{neuron_id}'] = weight
+
         return weights
+
+
+
         
                 
 
