@@ -144,17 +144,25 @@ def interpret_weights(weights_str):
     return architecture, total_layers
 
 def simulate_individual(individual, population_index, population_size, epoch, num_epochs, num_trials, headless, screen, clock, time, mode):
+    # print(f"Epoch {epoch}")
+    
     if mode == 'new' and epoch == 0:
         individual_name = generate_random_name()
         individual.append(individual_name)
-        # print(f"Candidate number {population_index + 1} of {population_size}: {individual_name}")
-    elif epoch > 0:
-        individual_name = generate_random_name()
-        individual[11] = individual[11] + " " + individual_name
-        # print(f"Epoch {epoch + 1}, candidate number {population_index + 1} of {population_size}")
-    elif mode == 'continue':
+        # Print the last item in the list
+        # print(f'The last item in the list is {individual[len(individual)-1]}')
+
+        # print(f'I am new and my name is {individual_name}')
+    elif mode == 'continue' and epoch == 0:
+        # print(f'The last item in the list is {individual[len(individual)-1]}')
         individual_name = individual[11]
-        # print(f"Epoch {epoch + 1}, candidate number {population_index + 1} of {population_size}")
+        # print(f'I am continuing and my name is {individual_name}')
+    else:
+        # print(f'The last item in the list is {individual[len(individual)-1]}')
+        individual_name = generate_random_name()
+        # print(individual[11])
+        individual[11] = individual[11] + " " + individual_name
+        # print(f'I am a child and my name is {individual_name} of {individual[11]}')
 
     # Initiate network
     weights, architecture, depth, parameters, recurrence, recurrence_type = individual[5:11]
@@ -193,7 +201,7 @@ def simulate_individual(individual, population_index, population_size, epoch, nu
 
     # Retrieve new weights based on learning
     updated_weights = network.retrieve_weights()
-    return population_index, individual_name, updated_weights, avg_fitness, individual[10]
+    return population_index, individual_name, updated_weights, avg_fitness, individual[11]
 
 def parallel_simulations(population, epoch, num_epochs, num_trials, num_processes, screen, clock, time, mode):
     # Use ProcessPoolExecutor to run simulations in parallel
@@ -209,7 +217,7 @@ def parallel_simulations(population, epoch, num_epochs, num_trials, num_processe
                 index, individual_name, updated_weights, avg_fitness, heritage = future.result()
                 population[index][5] = updated_weights
                 population[index].append(heritage)
-                epoch_data.append({'epoch': epoch, 'name': individual_name, 'avg_fitness': avg_fitness, 'individual': population[index]})
+                epoch_data.append({'epoch': epoch, 'name': individual_name, 'avg_fitness': avg_fitness, 'individual': population[index], 'heritage': heritage})
 
             return epoch_data
     except KeyboardInterrupt:
@@ -258,6 +266,7 @@ def evolutionary_system(population, selection, progeny, epoch, num_epochs, num_t
 def main():
 
     # Whether to initialise a new population ('new') or continue from a previous run ('continue')
+    # There is some sort of problem with continue, where fitness degrades significantly
     mode = 'new'
 
     # Set headless to True to run without visualisation
@@ -273,17 +282,17 @@ def main():
         headless = False
 
     # Set number of generations
-    num_epochs = 25
+    num_epochs = 1
 
     # Set number of trials for each individual within a generation 
-    num_trials = 3
+    num_trials = 200
 
     # Set initial population size
-    population_size = 1000
+    population_size = 7
 
     # Set subsequent population dynamics
-    selection = 10
-    progeny = 10
+    selection = 20
+    progeny = 20
 
     # Setup
     if mode == 'new':

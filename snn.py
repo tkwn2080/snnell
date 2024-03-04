@@ -223,6 +223,8 @@ class Network:
         self.frequency_counter = 1
         self.absence_counter = 0
 
+        self.prongs = [0,0,0,0]
+
         self.print_counter = 0
 
         self.learning_rate = parameters[0]
@@ -322,6 +324,15 @@ class Network:
         self.frequency_counter *= self.signal_decay
         self.global_signal *= self.signal_decay
         self.absence_counter *= self.absence_decay
+
+    def absence_spiking(self, source):
+        self.prongs[source] += 1
+
+        if self.prongs[source] >= 20:
+            self.prongs[source] = 0
+            return True
+        else:
+            return False
     
     def propagate_spike(self, spikes, count):
         self.network_decay()
@@ -331,22 +342,23 @@ class Network:
                 input_neuron = self.get_layer(0).neurons[i]
                 if spike == 1:
                     input_neuron.input_spike(1)
+                    self.prongs[i] = 0
+
                     self.frequency_counter += 0.5
                     self.absence_counter *= 0.95
-                    # print(f'Frequency counter: {self.frequency_counter}')
-                    # print(f'Particle counter: {count}')
 
                     reward = math.sqrt(self.frequency_counter)
-                    # print(count, self.frequency_counter, reward, self.global_signal)
+
                     self.global_signal += reward / 800
                 elif spike == 0:
-                    input_neuron = self.get_layer(0).neurons[i+4]
-                    input_neuron.input_spike(0.5)
-                    self.absence_counter += 0.5
+                    if self.absence_spiking(i):
+                        input_neuron = self.get_layer(0).neurons[i+4]
+                        input_neuron.input_spike(1)
+                        self.absence_counter += 1
 
-                    punishment = math.sqrt(self.absence_counter)
-                    self.global_signal -= punishment / 800
-                    # print(self.global_signal)
+                        punishment = math.sqrt(self.absence_counter)
+                        self.global_signal -= punishment / 800
+                        # print(self.global_signal)
             elif i == 4:
                 if spike == 1:
                     input_neuron = self.get_layer(0).neurons[i+4]

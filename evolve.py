@@ -102,7 +102,6 @@ def add_recurrence(weights, dimensions):
                     if layer not in recurrent_layers:
                         recurrent_layers.append(layer)
 
-
                 elif recurrence_type == 'backward':
                     # Adds backward recurrence to the selected layer
                     if layer >= 2:
@@ -238,7 +237,7 @@ def weights_reproduction(mother, father):
     return child_weights
 
 def weights_mutation(weights, mutation_strength):
-    mutation_rate = 0.7
+    mutation_rate = 1
     new_weights = copy.deepcopy(weights)
     for key in new_weights:
         if np.random.uniform(0, 1) < mutation_rate:
