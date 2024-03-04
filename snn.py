@@ -2,6 +2,7 @@ import numpy as np
 import mlx.core as mx
 import threading
 import time
+from evolve import Individual, Evolution
 
 class Layer:
     def __init__(self, n_in, n_out, weights):
@@ -37,7 +38,9 @@ class Layer:
         return spikes_out
 
 class Network:
-    def __init__(self, dim, weights):
+    def __init__(self, individual):
+        dim = individual.architecture
+        weights = Evolution.rehydrate(individual)
         self.layers = [Layer(dim[i], dim[i+1], weights[i]) for i in range(len(dim)-1)]
 
     def forward(self, spikes):

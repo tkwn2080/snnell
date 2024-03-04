@@ -1,7 +1,6 @@
 import numpy as np
 import random
 import mlx.core as mx
-from snn import Network
 import copy
 
 def set_seed(seed):
@@ -11,7 +10,6 @@ class Individual:
     def __init__(self, architecture, initial_seed):
         self.architecture = architecture
         self.initial_seed = initial_seed
-        self.weights = self.initialise_weights()
         self.mutation_history = []
         self.name = ''
         self.fitness = []
@@ -21,7 +19,7 @@ class Individual:
         set_seed(self.initial_seed)
         weights = []
         for i in range(len(self.architecture) - 1):
-            layer_weights = np.random.uniform(-1, 1, [self.architecture[i], self.architecture[i + 1]]).tolist()
+            layer_weights = mx.array(np.random.uniform(-1, 1, [self.architecture[i], self.architecture[i + 1]]))
             weights.append(layer_weights)
         return weights
 
@@ -44,7 +42,6 @@ class Evolution:
     def reproduction(individual, mutation_strength):
         mutation_seed = random.randint(0, int(1e6))
         new_individual = copy.deepcopy(individual)
-        new_individual.weights = Evolution.mutation(individual, mutation_seed, mutation_strength)
         new_individual.mutation_history.append([mutation_seed, mutation_strength])
         return new_individual
 
@@ -52,15 +49,23 @@ class Evolution:
         set_seed(mutation_seed)
         mutated_weights = []
         for layer in individual.weights:
-            # layer = mx.array(layer)
-            # mutation = mx.array(np.random.randn(*layer.shape) * mutation_strength)
-            # mutated_matrix = mx.add(layer, mutation)
-            # mutated_weights.append(mutated_matrix)
-
-            # Temporary list solution
-            mutation = (np.random.randn(*np.array(layer).shape) * mutation_strength).tolist()
-
-            mutated_layer = [[layer_val + mutation_val for layer_val, mutation_val in zip(layer_row, mutation_row)]
-                            for layer_row, mutation_row in zip(layer, mutation)]
-            mutated_weights.append(mutated_layer)
+            layer = mx.array(layer)
+            mutation = mx.array(np.random.randn(*layer.shape) * mutation_strength)
+            mutated_matrix = mx.add(layer, mutation)
+            mutated_weights.append(mutated_matrix)
         return mutated_weights
+
+    def rehydrate(individual):
+        new_individual = copy.deepcopy(individual)
+        original_weights = individual.initialise_weights()
+        if len(individual.mutation_history) > 0:
+            mutated_weights = []
+            for generation in range(len(individual.mutation_history)):
+                mutation_seed, mutation_strength = individual.mutation_history[generation]
+                mutated_weights = Evolution.mutation(individual, mutation_seed, mutation_strength)
+            weights = mutated_weights
+        else:
+            weights = original_weights
+        return weights
+            
+

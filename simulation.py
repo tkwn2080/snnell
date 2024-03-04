@@ -53,7 +53,6 @@ def run_simulation(individual, current_trial, total_trials, current_candidate, t
     distance = 3
     speed = 3
 
-    weights = individual.weights
     architecture = individual.architecture
 
     # Particle properties using deque for efficient removal

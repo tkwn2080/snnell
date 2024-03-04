@@ -7,9 +7,9 @@ import time
 import os
 from tqdm import tqdm
 import pygame
-import pandas as pd
-import ast
-import re
+# import pandas as pd
+# import ast
+# import re
 # os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
 
 from evolve import Individual, Population, Evolution
@@ -86,9 +86,7 @@ def simulate_individual(individual, population_index, population_size, epoch, nu
         individual.name = individual.name + " " + generate_random_name()
 
     # Initiate network
-    architecture = individual.architecture
-    weights = individual.weights
-    network = Network(architecture, weights)
+    network = Network(individual)
 
     # Run trials and calculate average fitness
     total_fitness = 0
@@ -152,6 +150,7 @@ def evolutionary_system(population, selection, progeny, epoch, num_epochs, num_t
     if mode == 'new' or epoch > 0:
         epoch_data = []
         if headless:
+            print(f"Running in headless mode")
             output_data = parallel_simulations(population, epoch, num_epochs, num_trials, processes, screen, clock, time, mode)
             epoch_data.extend(output_data)
             print(epoch_data)
@@ -183,7 +182,7 @@ def main():
     headless = True
 
     # Set number of processes to run in parallel
-    processes = 6
+    processes = 7
     
     # If multiple processes are used, run headless
     if processes > 1:
@@ -209,6 +208,7 @@ def main():
 
     # Setup
     if mode == 'new':
+        print("Initialising new population")
         population = Population(population_size, architecture)
     elif mode == 'continue':
         source = 'records/epoch_data.csv'
