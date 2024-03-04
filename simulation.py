@@ -38,7 +38,7 @@ individual_data = {}
 
 def run_simulation(individual, current_trial, total_trials, current_candidate, total_candidates, current_epoch, num_epochs, network, headless, screen, clock, time):
     if headless and screen is None and clock is None and time is None:
-        clock = SimpleClock(120)
+        clock = SimpleClock(180)
         time = clock
 
     global reward_signal
@@ -385,7 +385,7 @@ def run_simulation(individual, current_trial, total_trials, current_candidate, t
             # screen.blit(recurrent_layer_surface, (10, screen.get_height() - 30))
 
             pygame.display.flip()
-            clock.tick(120)  # Limit to 60 frames per second
+            clock.tick(180)  # Limit to 60 frames per second
 
     return {
         'collided': olfactory_entity.collided_with_emitter,

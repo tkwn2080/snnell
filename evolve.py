@@ -1,4 +1,5 @@
 import numpy as np
+import random
 import mlx.core as mx
 from snn import Network
 import copy
@@ -41,7 +42,7 @@ class Population:
 
 class Evolution:
     def reproduction(individual, mutation_strength):
-        mutation_seed = np.random.randint(1e6)
+        mutation_seed = random.randint(0, int(1e6))
         new_individual = copy.deepcopy(individual)
         new_individual.weights = Evolution.mutation(individual, mutation_seed, mutation_strength)
         new_individual.mutation_history.append([mutation_seed, mutation_strength])

@@ -38,7 +38,7 @@ def epoch_csv(epoch_data, epoch, architecture):
         if write_header:
             writer.writeheader()
 
-        print(f'Epoch data: {epoch_data}')
+        # print(f'Epoch data: {epoch_data}')
 
         for data in epoch_data:
             writer.writerow({
@@ -116,7 +116,7 @@ def simulate_individual(individual, population_index, population_size, epoch, nu
     individual.avg_fitness = avg_fitness
 
     epoch_data = {'epoch': epoch, 'name': individual.name, 'seed': individual.initial_seed, 'avg_fitness': individual.avg_fitness, 'heritage': individual.mutation_history}
-    print(epoch_data)
+    # print(epoch_data)
     return epoch_data
 
 def parallel_simulations(population, epoch, num_epochs, num_trials, num_processes, screen, clock, time, mode):
@@ -131,7 +131,7 @@ def parallel_simulations(population, epoch, num_epochs, num_trials, num_processe
             epoch_data = []
             for future in concurrent.futures.as_completed(futures):
                 output = future.result()
-                print(output)
+                # print(output)
                 epoch_data.append(output)
             return epoch_data
     except KeyboardInterrupt:
@@ -150,16 +150,17 @@ def breeding_program(population, reproduction_rate, epoch, num_epochs):
 
 def evolutionary_system(population, selection, progeny, epoch, num_epochs, num_trials, processes, headless, screen, clock, time, mode, architecture):
     if mode == 'new' or epoch > 0:
+        epoch_data = []
         if headless:
-            epoch_data = parallel_simulations(population, epoch, num_epochs, num_trials, processes, screen, clock, time, mode)
+            output_data = parallel_simulations(population, epoch, num_epochs, num_trials, processes, screen, clock, time, mode)
+            epoch_data.extend(output_data)
+            print(epoch_data)
 
         if not headless:
-            epoch_data = []
             for i, individual in enumerate(population.individuals):
                 output_data = simulate_individual(individual, i, len(population.individuals), epoch, num_epochs, num_trials, headless, screen, clock, time, mode)
                 epoch_data.append(output_data)
-
-
+                print(epoch_data)
 
         epoch_csv(epoch_data, epoch, architecture)
 
@@ -179,10 +180,10 @@ def main():
     mode = 'new'
 
     # Set headless to True to run without visualisation
-    headless = False
+    headless = True
 
     # Set number of processes to run in parallel
-    processes = 1
+    processes = 6
     
     # If multiple processes are used, run headless
     if processes > 1:
@@ -194,14 +195,14 @@ def main():
     num_epochs = 20
 
     # Set number of trials for each individual within a generation 
-    num_trials = 1
+    num_trials = 5
 
     # Set initial population size
-    population_size = 2
+    population_size = 1000
 
     # Set subsequent population dynamics
-    selection = 1
-    progeny = 2
+    selection = 10
+    progeny = 10
 
     # Set architecture
     architecture = [6,1000,1000,1000,1000,4]
@@ -226,11 +227,11 @@ def main():
     # Run
     for epoch in tqdm(range(num_epochs), desc="Epochs"):
         print(f"EPOCH {epoch+1}/{num_epochs}")
-        # if mode == 'new':
-        #     if epoch == 0:
-        #         selection = 20
-        #     else:
-        #         selection = 10
+        if mode == 'new':
+            if epoch == 0:
+                selection = 20
+            else:
+                selection = 10
         population = evolutionary_system(population, selection, progeny, epoch, num_epochs, num_trials, processes, headless, screen, clock, time, mode, architecture)
 
 if __name__ == "__main__":
