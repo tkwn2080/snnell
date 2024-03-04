@@ -12,11 +12,6 @@ from snn import Network
 
 simulation_length = 30000
 
-def collate_genotype(genotype):
-    genotype_str = f"Learning Rate: {genotype[8][0]}, Eligibility Decay: {genotype[8][1]}, Recurrent Layer: {genotype[9]}"
-    weights_str = genotype[5]
-    return genotype_str, weights_str
-
 class SimpleClock:
     def __init__(self, fps):
         self.start_time = time.time()  # Capture the start time when the instance is created
@@ -41,44 +36,9 @@ distance_records = {}
 
 individual_data = {}
 
-
-def calculate_distance(emitter_x, emitter_y, final_x, final_y, individual_name):
-    # Calculate the actual distance between the emitter and the final position
-    actual_distance = np.hypot(final_x - emitter_x, final_y - emitter_y)
-    
-    # Calculate the maximum possible distance in the simulation space
-    max_distance = np.hypot(1200, 800)
-    
-    # Normalize the actual distance to a 1-10 scale
-    # The scale is inverted since a lower score means closer
-    scaled_distance = (actual_distance / max_distance * 9) + 1
-    
-    # Ensure the scaled distance is within the bounds of 1-10
-    scaled_distance = max(min(scaled_distance, 10), 1)
-    
-    # Check if this is the first record for this individual or if it's a new minimum distance
-    # Only note down a record if the score is below 2.5
-    if (individual_name not in distance_records) or (scaled_distance < 2.5 and scaled_distance < distance_records[individual_name]):
-        distance_records[individual_name] = scaled_distance
-        is_record = True
-    else:
-        is_record = False
-
-    # Set record flag to false, avoids rewards for closest here
-    is_record = False
-    
-    return scaled_distance, is_record
-
-def run_simulation(genotype, current_trial, total_trials, current_candidate, total_candidates, current_epoch, num_epochs, network, individual_name, headless, screen, clock, time):
-    # if not headless:
-    #     pygame.init()
-    #     screen = screen
-    #     clock = clock
-    #     time = time
-    #     print('HEAD')
-
+def run_simulation(individual, current_trial, total_trials, current_candidate, total_candidates, current_epoch, num_epochs, network, headless, screen, clock, time):
     if headless and screen is None and clock is None and time is None:
-        clock = SimpleClock(180)
+        clock = SimpleClock(120)
         time = clock
 
     global reward_signal
@@ -87,17 +47,14 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
     white_particle_rate = 3  # How many white particles to emit per frame
     red_particle_rate = 2  # How many red particles to emit per frame once started
 
-    length = genotype[0]
-    probe_angle = genotype[1]
-    response_angle = genotype[2]
-    distance = genotype[3]
-    speed = genotype[4]
+    length = 120
+    probe_angle = 55 * (np.pi / 180)
+    response_angle = 3 * (np.pi / 180)
+    distance = 3
+    speed = 3
 
-    weights = genotype[5]
-    architecture = genotype[6]
-    depth = genotype[7]
-    parameters = genotype[8]
-    recurrence = genotype[9]
+    weights = individual.weights
+    architecture = individual.architecture
 
     # Particle properties using deque for efficient removal
     red_particles = deque()  # Red particles emitted from the top right corner
@@ -173,19 +130,12 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
             white_particles.append([1200, np.random.randint(0, 800), -np.random.rand() * 2 - 0.5, np.random.rand() * 2 - 1])
 
     # Define the emitter's position and the larger sphere's radius
-    # emitter_x = 900  # Keep the towards the right side
-    # emitter_y = 200  # Vertical middle of the screen
     emitter_x = np.random.randint(900, 1100)  # Randomly vary the x-coordinate
     if np.random.rand() < 0.5:
         emitter_y = np.random.randint(150, 300)
     else:
         emitter_y = np.random.randint(500, 650)
-
-    # emitter_y = np.random.randint(200, 600)  # Randomly vary the y-coordinate
-        
-
     emitter_radius = 10  # Radius of the larger sphere
-
     emitter = [emitter_x, emitter_y]
 
     def check_collision_with_emitter(entity_x, entity_y, emitter_x, emitter_y, entity_size, emitter_radius, probe_length, probe_angle):
@@ -238,18 +188,18 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
             
             # Punish the entity for not finding the emitter in time
 
-            distance, is_record = calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y, individual_name)
-            if is_record == True:
-                reward_signal += 50
-                # print(f'Reward for closest distance: {distance}.')
-            else: 
-                if olfactory_entity.particle_count != 0:
-                    punishment = (100 * distance / (olfactory_entity.particle_count / 10))
-                else:
-                    punishment = 100 * distance
-                reward_signal -= punishment
+            # distance, is_record = calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y, individual_name)
+            # if is_record == True:
+            #     reward_signal += 50
+            #     # print(f'Reward for closest distance: {distance}.')
+            # else: 
+            #     if olfactory_entity.particle_count != 0:
+            #         punishment = (100 * distance / (olfactory_entity.particle_count / 10))
+            #     else:
+            #         punishment = 100 * distance
+            #     reward_signal -= punishment
                 # print(f'Punishment for not finding the emitter in time: {punishment}. Ending simulation.')
-            Network.modify_learning(network, reward_signal)
+            # Network.modify_learning(network, reward_signal)
 
             break  # Exit the simulation loop after the time limit
 
@@ -265,18 +215,18 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
 
         if olfactory_entity.x < BOUNDARY_LEFT or olfactory_entity.x > BOUNDARY_RIGHT or olfactory_entity.y < BOUNDARY_TOP or olfactory_entity.y > BOUNDARY_BOTTOM:
             
-            distance, is_record = calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y, individual_name)
-            if is_record == True:
-                reward_signal += 50
-                # print(f'Reward for closest distance: {distance}.')
-            else: 
-                if olfactory_entity.particle_count != 0:
-                    punishment = (100 * distance / (olfactory_entity.particle_count / 10))
-                else:
-                    punishment = 100 * distance
-                # print(f"Punishment for going out of bounds: {punishment}. Ending simulation.")
-                reward_signal -= punishment
-            Network.modify_learning(network, reward_signal)
+            # distance, is_record = calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y, individual_name)
+            # if is_record == True:
+            #     reward_signal += 50
+            #     # print(f'Reward for closest distance: {distance}.')
+            # else: 
+            #     if olfactory_entity.particle_count != 0:
+            #         punishment = (100 * distance / (olfactory_entity.particle_count / 10))
+            #     else:
+            #         punishment = 100 * distance
+            #     # print(f"Punishment for going out of bounds: {punishment}. Ending simulation.")
+            #     reward_signal -= punishment
+            # Network.modify_learning(network, reward_signal)
             return {
                 'collided': False,
                 'collision_time': None,
@@ -321,8 +271,8 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
                 olfactory_entity.collision_time = time.get_ticks() - simulation_start_time
                 
                 # Reward the entity for finding the emitter
-                reward_signal += 100
-                Network.modify_learning(network, reward_signal)
+                # reward_signal += 100
+                # Network.modify_learning(network, reward_signal)
                 
                 # print("Collision with emitter at time:", olfactory_entity.collision_time)
                 return {
@@ -340,17 +290,17 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
         if opening_countdown > 600:
             if olfactory_entity.timesteps_since_touch > 1200:
 
-                distance, is_record = calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y, individual_name)
-                if is_record == True:
-                    reward_signal += 50
-                    # print(f'Reward for closest distance: {distance}.')
-                else: 
-                    if olfactory_entity.particle_count != 0:
-                        punishment = (100 * distance / (olfactory_entity.particle_count / 10))
-                    else:
-                        punishment = 100 * distance
-                    reward_signal -= punishment
-                    # print(f"Punishment for getting lost: {punishment}. Ending simulation.")
+                # distance, is_record = calculate_distance(emitter_x, emitter_y, olfactory_entity.x, olfactory_entity.y, individual_name)
+                # if is_record == True:
+                #     reward_signal += 50
+                #     # print(f'Reward for closest distance: {distance}.')
+                # else: 
+                #     if olfactory_entity.particle_count != 0:
+                #         punishment = (100 * distance / (olfactory_entity.particle_count / 10))
+                #     else:
+                #         punishment = 100 * distance
+                #     reward_signal -= punishment
+                #     # print(f"Punishment for getting lost: {punishment}. Ending simulation.")
 
                 return {
                     'collided': False,
@@ -405,34 +355,34 @@ def run_simulation(genotype, current_trial, total_trials, current_candidate, tot
             if not headless:
                 olfactory_entity.draw(screen)
 
-        if reward_signal != 0:
-            Network.modify_learning(network, reward_signal)
-            reward_signal = 0
+        # if reward_signal != 0:
+        #     Network.modify_learning(network, reward_signal)
+        #     reward_signal = 0
 
         # Display trial, candidate number, epoch number, architecture, learning rate, and decay rate
         if not headless:
             font = pygame.font.Font(None, 36)
             trial_text = f"Trial: {current_trial}/{total_trials}"
             candidate_text = f"Candidate: {current_candidate}/{total_candidates}"
-            epoch_text = f"Epoch: {current_epoch}/{num_epochs}"
+            epoch_text = f"Epoch: {current_epoch+1}/{num_epochs}"
             architecture_text = f"Architecture: {architecture}"
-            learning_rate_text = f"Learning Rate: {parameters[0]}"
-            decay_rate_text = f"Eligibility Decay: {parameters[1]}"
-            recurrent_layer_text = f"Recurrent Layer: {recurrence}"
+            # learning_rate_text = f"Learning Rate: {parameters[0]}"
+            # decay_rate_text = f"Eligibility Decay: {parameters[1]}"
+            # recurrent_layer_text = f"Recurrent Layer: {recurrence}"
             trial_surface = font.render(trial_text, True, (255, 255, 255))
             candidate_surface = font.render(candidate_text, True, (255, 255, 255))
             epoch_surface = font.render(epoch_text, True, (255, 255, 255))
             architecture_surface = font.render(architecture_text, True, (255, 255, 255))
-            learning_rate_surface = font.render(learning_rate_text, True, (255, 255, 255))
-            decay_rate_surface = font.render(decay_rate_text, True, (255, 255, 255))
-            recurrent_layer_surface = font.render(recurrent_layer_text, True, (255, 255, 255))
-            screen.blit(trial_surface, (10, screen.get_height() - 210))
-            screen.blit(candidate_surface, (10, screen.get_height() - 180))
-            screen.blit(epoch_surface, (10, screen.get_height() - 150))
-            screen.blit(architecture_surface, (10, screen.get_height() - 120))
-            screen.blit(learning_rate_surface, (10, screen.get_height() - 90))
-            screen.blit(decay_rate_surface, (10, screen.get_height() - 60))
-            screen.blit(recurrent_layer_surface, (10, screen.get_height() - 30))
+            # learning_rate_surface = font.render(learning_rate_text, True, (255, 255, 255))
+            # decay_rate_surface = font.render(decay_rate_text, True, (255, 255, 255))
+            # recurrent_layer_surface = font.render(recurrent_layer_text, True, (255, 255, 255))
+            screen.blit(trial_surface, (10, screen.get_height() - 120))
+            screen.blit(candidate_surface, (10, screen.get_height() - 90))
+            screen.blit(epoch_surface, (10, screen.get_height() - 60))
+            screen.blit(architecture_surface, (10, screen.get_height() -30))
+            # screen.blit(learning_rate_surface, (10, screen.get_height() - 90))
+            # screen.blit(decay_rate_surface, (10, screen.get_height() - 60))
+            # screen.blit(recurrent_layer_surface, (10, screen.get_height() - 30))
 
             pygame.display.flip()
             clock.tick(120)  # Limit to 60 frames per second
