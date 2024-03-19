@@ -1,266 +1,115 @@
-import numpy as np
-import pygame
+# This will draw the entity
+# The entity should have plastic antennae with olfactory ciliae
+# How do we encode at the receptor level?
+from receptors import Antennae, Cilia
 from snn import Network
+import numpy as np
+from body import Body
 import mlx.core as mx
 
-class OlfactoryEntity:
-        def __init__(self, x, y, length, probe_angle, response_angle, distance, speed, network):
-            self.x = x
-            self.y = y
-            self.speed = speed
-            self.size = 12
-            self.angle = 0
-            self.prong_length = length
-            self.prong_thickness = 3
-            self.prong_angle = probe_angle
-            self.response_angle = response_angle
+class Entity:
+    def __init__(self, network, xy):
+        self.x = xy[0]
+        self.y = xy[1]
+        self.angle = 0
+        self.speed = 1
+        self.response_angle = 1 * (np.pi / 180)
 
-            self.L1_prong_x = None
-            self.L1_prong_y = None
-            self.R1_prong_x = None
-            self.R1_prong_y = None
-            self.L2_prong_x = None
-            self.L2_prong_y = None
-            self.R2_prong_x = None
-            self.R2_prong_y = None
+        self.body = Body()
+        self.input_potential = mx.zeros(12, dtype=mx.float32)
+        self.spikes = mx.zeros(12, dtype=mx.float32)
+        self.thresholds = mx.ones_like(self.spikes)
+        self.counter = 250
 
-            self.prongs = [[self.L1_prong_x, self.L1_prong_y,], [self.R1_prong_x, self.R1_prong_y], [self.L2_prong_x, self.L2_prong_y], [self.R2_prong_x, self.R2_prong_y]]
-            self.update_prong_positions()
+        # Status counters, etc.
+        self.movement_counter = 1
+        self.collided_with_emitter = False
+        self.collision_time = None
+        self.particle_count = 0
+        self.timesteps_since_touch = 0
 
-            self.spikes = [0,0,0,0]
-            
-            # Status counters, etc.
-            self.left_counter = 0
-            self.right_counter = 0
-            self.movement_counter = distance
-            self.collided_with_emitter = False
-            self.collision_time = None  # Time when collision occurred
-            self.particle_count = 0
-            self.timesteps_since_touch = 0
-            
-            # Tail wiggle attributes
-            self.tail_wiggle_angle = np.pi / 12  # Maximum wiggle angle deviation
-            self.tail_wiggle_speed = 0.2  # Speed of the wiggle
-            self.wiggle_phase = 0  # Current phase of the wiggle
+        # SNN
+        self.network = network
 
-            self.network = network
+    def get_entity(self):
+        return self.x, self.y, self.angle
 
-            self.closest_distance = 800
-            self.last_five_distances = []
-            
-        def update_prong_positions(self):
-            # Calculate and update the positions of all prongs based on the current entity position and angle
-            self.L1_prong_x = self.x + np.cos(self.angle + self.prong_angle) * self.prong_length
-            self.L1_prong_y = self.y + np.sin(self.angle + self.prong_angle) * self.prong_length
-            self.R1_prong_x = self.x + np.cos(self.angle - self.prong_angle) * self.prong_length
-            self.R1_prong_y = self.y + np.sin(self.angle - self.prong_angle) * self.prong_length
+    def draw(self, screen):
+        self.body.draw(screen, self.x, self.y, self.angle)
 
-            recessed_x1 = self.x - np.cos(self.angle) * self.size * 0.75
-            recessed_y1 = self.y - np.sin(self.angle) * self.size * 0.75
+    def straight_ahead(self, distance):
+        dx = np.cos(self.angle) * distance
+        dy = np.sin(self.angle) * distance
+        self.x += dx
+        self.y += dy
+        Body.wiggle(self.body, distance)
+        # print(f'Straight ahead by {distance}')
 
-            self.L2_prong_x = recessed_x1 + np.cos(self.angle + self.prong_angle) * self.prong_length
-            self.L2_prong_y = recessed_y1 + np.sin(self.angle + self.prong_angle) * self.prong_length
-            self.R2_prong_x = recessed_x1 + np.cos(self.angle - self.prong_angle) * self.prong_length
-            self.R2_prong_y = recessed_y1 + np.sin(self.angle - self.prong_angle) * self.prong_length
+    def left_turn(self, angle):
+        self.angle += angle
+        # print(f'Left by {angle} degrees')
 
-            # Update prongs list
-            self.prongs = [[self.L1_prong_x, self.L1_prong_y], [self.R1_prong_x, self.R1_prong_y],
-                        [self.L2_prong_x, self.L2_prong_y], [self.R2_prong_x, self.R2_prong_y]]
+    def right_turn(self, angle):
+        self.angle -= angle
+        # print(f'Right by {angle} degrees')
 
-        def draw(self, screen):
+    def interpret_output(self, output):
+        # if output[0] > 0:
+        #     turn_angle = self.response_angle * output[0]
+        #     self.left_turn(turn_angle)
+        #     print(f'Turn left by {turn_angle}')
 
-            # FIRST CIRCLE  
-            pygame.draw.circle(screen, (0, 255, 0), (int(self.x), int(self.y)), self.size)
-            
-            # SECOND CIRCLE
-            recessed_x1 = self.x - np.cos(self.angle) * self.size * 0.75
-            recessed_y1 = self.y - np.sin(self.angle) * self.size * 0.75
-            pygame.draw.circle(screen, (0, 255, 0), (int(recessed_x1), int(recessed_y1)), self.size / 1.5)
+        # forward_distance = self.movement_counter * ((output[1] + output[2]) / 2)
+        # self.straight_ahead(forward_distance)
 
-            # THIRD CIRCLE
-            recessed_x2 = recessed_x1 - np.cos(self.angle) * self.size * 0.75
-            recessed_y2 = recessed_y1 - np.sin(self.angle) * self.size * 0.75
-            pygame.draw.circle(screen, (0, 255, 0), (int(recessed_x2), int(recessed_y2)), self.size / 2)
-    
-            # FIRST PRONGS
-            forward_shift = self.size * 0.5
-            left_prong_x = self.x + np.cos(self.angle + self.prong_angle) * self.prong_length + np.cos(self.angle) * forward_shift
-            self.L1_prong_x = left_prong_x
-            left_prong_y = self.y + np.sin(self.angle + self.prong_angle) * self.prong_length + np.sin(self.angle) * forward_shift
-            self.L1_prong_y = left_prong_y
-            right_prong_x = self.x + np.cos(self.angle - self.prong_angle) * self.prong_length + np.cos(self.angle) * forward_shift
-            self.R1_prong_x = right_prong_x
-            right_prong_y = self.y + np.sin(self.angle - self.prong_angle) * self.prong_length + np.sin(self.angle) * forward_shift
-            self.R1_prong_y = right_prong_y
-            pygame.draw.line(screen, (0, 255, 0), (self.x, self.y), (left_prong_x, left_prong_y), 1)
-            pygame.draw.line(screen, (0, 255, 0), (self.x, self.y), (right_prong_x, right_prong_y), 1)
+        # if output[3] > 0:
+        #     turn_angle = self.response_angle * output[3]
+        #     self.right_turn(turn_angle)
 
-            # SECOND PRONGS
-            backward_shift = self.size * 0.5
-            left_prong2_x = recessed_x1 + np.cos(self.angle + self.prong_angle) * self.prong_length - np.cos(self.angle) * backward_shift
-            self.L2_prong_x = left_prong2_x
-            left_prong2_y = recessed_y1 + np.sin(self.angle + self.prong_angle) * self.prong_length - np.sin(self.angle) * backward_shift
-            self.L2_prong_y = left_prong2_y
-            right_prong2_x = recessed_x1 + np.cos(self.angle - self.prong_angle) * self.prong_length - np.cos(self.angle) * backward_shift
-            self.R2_prong_x = right_prong2_x
-            right_prong2_y = recessed_y1 + np.sin(self.angle - self.prong_angle) * self.prong_length - np.sin(self.angle) * backward_shift
-            self.R2_prong_y = right_prong2_y
-            pygame.draw.line(screen, (0, 255, 0), (recessed_x1, recessed_y1), (left_prong2_x, left_prong2_y), 1)
-            pygame.draw.line(screen, (0, 255, 0), (recessed_x1, recessed_y1), (right_prong2_x, right_prong2_y), 1)
-    
-            # TAIL
-            wiggle_effect = np.sin(self.wiggle_phase) * self.tail_wiggle_angle
-            tail_angle = self.angle + wiggle_effect
-            tail_length = self.size * 2
-            tail_width = 3  
-            tail_x = recessed_x2 - np.cos(tail_angle) * tail_length
-            tail_y = recessed_y2 - np.sin(tail_angle) * tail_length
-            pygame.draw.line(screen, (0, 255, 0), (recessed_x2, recessed_y2), (tail_x, tail_y), tail_width)
-
-        def check_prong_collision(self, particle, prong_x, prong_y):
-
-            if prong_x is None or prong_y is None:
-                print("Prong position is None, skipping collision check")  # Temporary debugging aid
-                return False
-
-            prong_end_pos = np.array([prong_x, prong_y])
-            entity_pos = np.array([self.x, self.y])
-            particle_pos = np.array(particle[:2])  # Assuming particle format is [x, y, vx, vy]
-
-            prong_vector = prong_end_pos - entity_pos
-            particle_vector = particle_pos - entity_pos
-
-            # Calculate the projection of the particle vector onto the prong vector
-            projection = np.dot(particle_vector, prong_vector) / np.linalg.norm(prong_vector)
-            projected_vector = projection * prong_vector / np.linalg.norm(prong_vector)
-            closest_point = entity_pos + projected_vector
-
-            # Check if the projection falls within the prong's length
-            if np.linalg.norm(projected_vector) > np.linalg.norm(prong_vector) or projection < 0:
-                return False
-
-            # Calculate the distance from the closest point on the prong to the particle
-            distance_to_particle = np.linalg.norm(closest_point - particle_pos)
-
-            # Collision detected if the distance is less than the sum of the radii
-            particle_radius = 2  # Assuming particle radius is 2
-            return distance_to_particle <= (particle_radius + self.prong_thickness / 2)
-        
-        def check_emitter_collision(self, emitter, prong_x, prong_y):
-            if prong_x is None or prong_y is None:
-                print("Prong position is None, skipping collision check")
-                return False
-            
-            prong_end_pos = np.array([prong_x, prong_y])
-            emitter_pos = np.array(emitter[:2])
-            entity_pos = np.array([self.x, self.y])
-
-            prong_vector = prong_end_pos - entity_pos
-            emitter_vector = emitter_pos - entity_pos
-
-            # Calculate the projection of the emitter vector onto the prong vector
-            projection = np.dot(emitter_vector, prong_vector) / np.linalg.norm(prong_vector)
-            projected_vector = projection * prong_vector / np.linalg.norm(prong_vector)
-            closest_point = entity_pos + projected_vector
-
-            # Check if the projection falls within the prong's length
-            if np.linalg.norm(projected_vector) > np.linalg.norm(prong_vector) or projection < 0:
-                return False
-            
-            # Calculate the distance from the closest point on the prong to the emitter
-            distance_to_emitter = np.linalg.norm(closest_point - emitter_pos)
-
-            # Collision detected if the distance is less than the sum of the radii
-            emitter_radius = 10  # Assuming emitter radius is 10
-            return distance_to_emitter <= (emitter_radius + self.prong_thickness / 2)
-        
-
-        # NEW WORKOUTPLAN
-        def move(self, action):
-            if np.array_equal(action, [1, 0, 0]):
+        # Select the appropriate action based on the maximum output value
+        values = mx.softmax(output)
+        diffs = mx.abs(values - values[0])
+        are_equal = mx.max(diffs) < 1e-6
+        if are_equal:
+            # print('beep')
+            pass
+        else:
+            action = mx.argmax(output)
+            if action == 0:
                 self.left_turn(self.response_angle)
-            elif np.array_equal(action, [0, 1, 0]):
+            elif action == 1:
                 self.straight_ahead(self.movement_counter)
-            elif np.array_equal(action, [0, 0, 1]):
+            elif action == 2:
+                self.straight_ahead(self.movement_counter)
+            elif action == 3:
                 self.right_turn(self.response_angle)
 
-        def straight_ahead(self, distance):
-            if distance < 0:
-                print("Distance cannot be negative, switching")
-            distance = abs(distance)
-            self.x += np.cos(self.angle) * distance
-            self.y += np.sin(self.angle) * distance
-
-        def left_turn(self, angle, distance):
-            self.angle += angle
-            if distance < 0:
-                print("Distance cannot be negative, switching")
-            distance = abs(distance)
-            self.x += np.cos(self.angle) * distance
-            self.y += np.sin(self.angle) * distance
-
-        def right_turn(self, angle, distance):
-            self.angle -= angle
-            if distance < 0:
-                print("Distance cannot be negative, switching")
-            distance = abs(distance)
-            self.x += np.cos(self.angle) * distance
-            self.y += np.sin(self.angle) * distance
-
-        def interpret_output(self, output):
-            if output[0] == 1:
-                self.left_turn(self.response_angle, self.movement_counter)
-                self.wiggle_phase += self.tail_wiggle_speed
-            elif output[0] > 0:
-                self.left_turn(self.response_angle * output[0], self.movement_counter * output[0])
-                self.wiggle_phase += self.tail_wiggle_speed * output[0]
-            if (output[1] == 1) and (output[2] == 1):
-                # print('D-D-D-DOUBLE SPEEEED')
-                self.straight_ahead(self.movement_counter)
-                self.wiggle_phase += self.tail_wiggle_speed
-                self.straight_ahead(self.movement_counter)
-                self.wiggle_phase += self.tail_wiggle_speed
-            elif (output[1] == 1) or (output[2] == 1):
-                self.straight_ahead(self.movement_counter)
-                self.wiggle_phase += self.tail_wiggle_speed
-            elif (output[1] > 0):
-                self.straight_ahead(self.movement_counter * output[1])
-                self.wiggle_phase += self.tail_wiggle_speed * (output[1])
-            elif (output[2] > 0):
-                self.straight_ahead(self.movement_counter * output[2])
-                self.wiggle_phase += self.tail_wiggle_speed * (output[2])
-                
-            if (output[1] == 1) and (output[2] == 1):
-                self.straight_ahead(self.movement_counter)
-                self.wiggle_phase += self.tail_wiggle_speed
-                self.straight_ahead(self.movement_counter)
-                self.wiggle_phase += self.tail_wiggle_speed
-            if output[3] == 1:
-                self.right_turn(self.response_angle, self.movement_counter)
-                self.wiggle_phase += self.tail_wiggle_speed
-            elif output[3] > 0:
-                self.right_turn(self.response_angle * output[3], self.movement_counter * output[3])
-                self.wiggle_phase += self.tail_wiggle_speed * output[3]
-
-        def update(self, red_particles, emitter):
-
-            self.spikes = [0,0,0,0,0,0]
-
-            for particle in red_particles:
-                
-                for i, prong in enumerate(self.prongs):
-                    if self.check_prong_collision(particle, prong[0], prong[1]):
-                        self.spikes[i] = 1
-                        self.particle_count += 1
-
-            # Check emitter collision for left prongs
-            if self.check_emitter_collision(emitter, self.prongs[0][0], self.prongs[0][1]) or self.check_emitter_collision(emitter, self.prongs[1][0], self.prongs[1][1]):
-                self.spikes[4] = 1
-
-            # Check emitter collision for right prongs
-            if self.check_emitter_collision(emitter, self.prongs[2][0], self.prongs[2][1]) or self.check_emitter_collision(emitter, self.prongs[3][0], self.prongs[3][1]):
-                self.spikes[5] = 1
-
+    def update(self, state):
+        self.body.update(self.x, self.y, self.angle)
+        if self.counter == 0:
             spikes = mx.array(self.spikes)
-            output = self.network.forward(spikes)
+            input_current = []
+
+            antennae = self.body.get_antennae(self.x, self.y, self.angle)
+            antennae_spikes = Antennae.get_spikes(state[0], antennae, self.angle)
+
+            cilia = self.body.get_cilia(self.x, self.y)
+            cilia_spikes = Cilia.get_spikes(state[1], cilia)
+
+            input_current.extend(antennae_spikes)
+            input_current.extend(cilia_spikes)
+
+            input_current = mx.array(input_current)
+            
+            output = Network.inject_current(self.network, input_current)
+            # print(f'Output: {output}')
             self.interpret_output(output)
+
+        # elif self.counter == 10:
+        #     self.counter -= 1
+        #     # self.angle = mx.random.uniform(-30, 30) * mx.pi / 180
+        #     # print(f"Entity angle: {self.angle}")
+
+        else:
+            self.counter -= 1
+        

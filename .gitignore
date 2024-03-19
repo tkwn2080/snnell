@@ -154,3 +154,6 @@ cython_debug/
 
 # Test data
 records/
+
+# Archived stuff
+archive/
