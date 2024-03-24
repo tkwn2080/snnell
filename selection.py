@@ -38,6 +38,11 @@ class Selection:
         if self.additional_trials:
             top_individuals = self.run_additional_trials(top_individuals, self.final_rounds)
 
+        print("Top {} individuals:".format(n_individuals))
+        for rank, individual in enumerate(top_individuals, start=1):
+            print("Rank {}: {} ({})".format(rank, individual.name, individual.fitness))
+            print(f"Mutation History: {individual.mutation_history}")
+
         return top_individuals, rankings
 
     def run_additional_trials(self, selected_individuals, n_rounds):

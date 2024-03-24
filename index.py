@@ -3,7 +3,6 @@ import numpy as np
 import time
 from tqdm import tqdm
 import pygame
-import cProfile
 
 from evolve import Individual, Population, Evolution
 from snn import Network
@@ -36,7 +35,7 @@ def simulate_individual(individual, population_index, population_size, epoch, nu
         simulation_data = simulation.simulate('constant', emitter_x, emitter_y, individual, neuron_type, headless, environment, recurrent)
         
         fitness = Paperwork.calculate_fitness(simulation_data)
-        individual.fitness.append(fitness)
+        # individual.fitness.append(fitness)
 
         trial_data = {
             'epoch_number': epoch + 1,
@@ -68,6 +67,7 @@ def parallel_simulations(population, epoch, num_epochs, num_trials, num_processe
             futures = []
             for index, individual in enumerate(population.individuals):
                 headless = True
+                print(f"Simulating {individual.name}: Mutation History: {individual.mutation_history}")
                 futures.append(executor.submit(simulate_individual, individual, index, len(population.individuals), epoch, num_epochs, num_trials, headless, mode, recurrent))
             
             epoch_data = []
@@ -82,15 +82,15 @@ def parallel_simulations(population, epoch, num_epochs, num_trials, num_processe
 
 def breeding_program(population, reproduction_rate, epoch, num_epochs, recurrent):
     mutation_strength = 0.1 - (0.009 * (epoch / num_epochs))
-
-    new_population = Population(0, population.individuals[0].architecture, recurrent)
+    new_individuals = []
     for individual in population.individuals:
         for _ in range(reproduction_rate):
             progeny = Evolution.reproduction(individual, mutation_strength)
-            new_population.individuals.append(progeny)  # Use append since progeny is a single Individual object
+            new_individuals.append(progeny)
+    new_population = Population(len(new_individuals), population.individuals[0].architecture, recurrent, individuals=new_individuals)
     return new_population
 
-def evolutionary_system(environment,population, selection, selector, progeny, epoch, num_epochs, num_trials, processes, headless, mode, architecture, recurrent):
+def evolutionary_system(environment, population, selection, selector, progeny, epoch, num_epochs, num_trials, processes, headless, mode, architecture, recurrent):
     if mode == 'new' or epoch > 0:
         epoch_data = []
         if headless:
@@ -102,11 +102,24 @@ def evolutionary_system(environment,population, selection, selector, progeny, ep
                 output_data = simulate_individual(individual, i, len(population.individuals), epoch, num_epochs, num_trials, headless, mode, environment, recurrent)
                 epoch_data.append(output_data)
 
+        # Update the epoch data with the full mutation history
+        for data in epoch_data:
+            individual_name = data['name']
+            individual = next((ind for ind in population.individuals if ind.name == individual_name), None)
+            if individual:
+                data['heritage'] = individual.mutation_history
+
         Paperwork.epoch_csv(epoch_data, epoch, architecture)
 
-        selected = selector.select(population, selection)
+        selected_individuals, rankings = selector.select(population, selection)
 
-        survivors = Population(selection, population.individuals[0].architecture, selected)
+        print(f'Mutation history for selected individuals:')
+        for individual in selected_individuals:
+            print(f'Type of individual: {type(individual)}')
+            print(f'{individual.name}: {individual.mutation_history}')
+
+        print(f'Selected individuals: {selected_individuals}')
+        survivors = Population(selection, population.individuals[0].architecture, recurrent, individuals=selected_individuals)
 
     elif mode == 'continue':
         survivors = population
@@ -125,7 +138,7 @@ def main():
     headless = True
 
     # Set number of processes to run in parallel
-    processes = 16
+    processes = 20
     
     # If multiple processes are used, run headless
     if processes > 1:
@@ -140,11 +153,11 @@ def main():
     num_trials = 2
 
     # Set initial population size
-    population_size = 100
+    population_size = 200
 
     # Set subsequent population dynamics
     selection = 5
-    progeny = 10
+    progeny = 20
 
     # Set architecture: input and output must be 12 and 4 respectively
     architecture = [14,80,80,80,40,4]
@@ -193,5 +206,4 @@ def main():
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
-    cProfile.run('main()')
-    # main()
+    main()

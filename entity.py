@@ -12,8 +12,8 @@ class Entity:
         self.x = xy[0]
         self.y = xy[1]
         self.angle = 0
-        self.speed = 30
-        self.response_angle = 30
+        self.speed = 15
+        self.response_angle = 30 * mx.pi / 180
 
         self.body = Body()
         self.input_potential = mx.zeros(14, dtype=mx.float32)

@@ -33,13 +33,12 @@ class Individual:
 
     def rehydrate(self):
         weights, recurrent_weights = self.initialise_weights()
-        if len(self.mutation_history) > 0:
-            for generation in range(len(self.mutation_history)):
-                mutation_seed, mutation_strength = self.mutation_history[generation]
-                weights, recurrent_weights = Evolution.mutation(weights, recurrent_weights, mutation_seed, mutation_strength)
-            return weights, recurrent_weights
-        else:
-            return weights, recurrent_weights
+        for generation in range(len(self.mutation_history)):
+            mutation_seed, mutation_strength = self.mutation_history[generation]
+            mutated_weights, mutated_recurrent_weights = Evolution.mutation(weights, recurrent_weights, mutation_seed, mutation_strength)
+            weights = mutated_weights
+            recurrent_weights = mutated_recurrent_weights
+        return weights, recurrent_weights
 
 class Population:
     def __init__(self, size, architecture, recurrent, individuals=None):
@@ -53,11 +52,15 @@ class Population:
 
 class Evolution:
     def reproduction(individual, mutation_strength):
+        print(f'Individual: {individual}')
         mutation_seed = random.randint(0, int(1e6))
         new_individual = copy.deepcopy(individual)
         new_individual.name = Paperwork.generate_random_name()
-        new_individual.mutation_history = individual.mutation_history.copy()  # Copy the entire mutation history
+        print(f'Mutation history for individual {individual.name}: {individual.mutation_history}')
+        new_individual.mutation_history = individual.mutation_history.copy()
+        print(f'Mutation history for new individual {new_individual.name}: {new_individual.mutation_history}')
         new_individual.mutation_history.append([mutation_seed, mutation_strength])  # Append the new mutation
+        print(f'Appended mutation history for new individual {new_individual.name}: {new_individual.mutation_history}')
         return new_individual
 
     def mutation(weights, recurrent_weights, mutation_seed, mutation_strength):
