@@ -9,16 +9,16 @@ from snn import Network
 from evolve import Population, Individual
 
 class Simulation:
-    def __init__(self, emitter_x, emitter_y, neuron_type):
+    def __init__(self, emitter_x, emitter_y, neuron_type, recurrent=False):
         self.arena_size_x = 1200
         self.arena_size_y = 800
-        self.wind_speed = 150
+        self.wind_speed = 140
         self.wind_direction = mx.array(180 * mx.pi / 180)
         self.puff_birth_rate = 1.0
         self.puff_init_radius = 0.05
         self.puff_init_concentration = 100
-        self.diffusion_rate = 0.2
-        self.random_walk_scale = 2
+        self.diffusion_rate = 0.4
+        self.random_walk_scale = 3
         self.time_step = 0.01
         self.max_time = 15
 
@@ -40,11 +40,23 @@ class Simulation:
         elif emitter_y > 0:
             self.wind_switch = False
 
-        # SOURCE
-        self.source_x = emitter_x 
-        self.source_y = emitter_y 
+        # ENTITY
+        self.entity_x = np.random.uniform(50,200)
+        if emitter_y < 0:
+            self.entity_y = emitter_y + 450 + np.random.uniform(0,100)
+        elif emitter_y > 0:
+            self.entity_y = emitter_y + 350 - np.random.uniform(0,100)
 
+        # BEHAVIOUR
+        self.angle = None
+        self.record_time = 2
+        self.record_data = []
+        self.origin_x = self.entity_x
+        self.origin_y = self.entity_y
+        
+        # NETWORK
         self.neuron_type = neuron_type
+        self.recurrent = recurrent
         
         # Initialize puffs dataframe
         # self.puffs_df = pd.DataFrame(columns=['puff_number', 'time', 'x', 'y', 'radius', 'concentration'])
@@ -169,8 +181,48 @@ class Simulation:
             return True
         else:
             return False
+
+    def sample_behaviour(self, entity):
+        if self.current_time >= self.record_time:
+            self.record_time += 1
+            sample = Entity.get_entity(entity)
+            
+            # Standardize the coordinates by subtracting the origin
+            standardized_x = sample[0] - self.origin_x
+            standardized_y = sample[1] - self.origin_y
+            
+            # Create a new standardized sample
+            standardized_sample = [standardized_x, standardized_y] + list(sample[2:])
+            
+            self.record_data.append(standardized_sample)
+
+    def behaviour_record(self, entity):
+        if len(self.record_data) < 15:
+            # Pad to 15 with the final position
+            for _ in range(15 - len(self.record_data)):
+                record = Entity.get_entity(entity)
+                
+                # Standardize the coordinates by subtracting the origin
+                standardized_x = record[0] - self.origin_x
+                standardized_y = record[1] - self.origin_y
+                
+                # Create a new standardized record
+                standardized_record = [standardized_x, standardized_y] + list(record[2:])
+                
+                self.record_data.append(standardized_record)
+            
+            return self.record_data
+        
+        elif len(self.record_data) == 15:
+            return self.record_data
+        
+        else:
+            length = len(self.record_data)
+            print(f'Length of record too long: {length}')
+
+        
          
-    def simulate(self, wind_config, emitter_x, emitter_y, individual, neuron_type, headless, environment=None):
+    def simulate(self, wind_config, emitter_x, emitter_y, individual, neuron_type, headless, recurrent, environment=None):
         self.current_time = 0
         puff_counter = 0
         outside_steps = 0  # Initialize outside_steps counter
@@ -180,8 +232,9 @@ class Simulation:
             screen, clock = environment
             pygame.display.set_caption("snnell")
 
-        self.network = Network(individual, neuron_type)
-        entity = Entity(self.network, [200, 400])
+        # INITIATE NETWORK AND ENTITY
+        self.network = Network(individual, neuron_type, self.recurrent)
+        entity = Entity(self.network, [self.entity_x, self.entity_y])
         
         # if not headless:
         #     pygame.init()
@@ -227,9 +280,10 @@ class Simulation:
                     return {
                         'collided': self.collision,
                         'collision_time': self.collision_time,
-                        'final_position': (entity.x, entity.y),
                         'simulation_time': elapsed_time,
+                        'final_position': (entity.x, entity.y),
                         'emitter_position': (emitter_x, emitter_y),
+                        'behaviour_record': self.behaviour_record(entity),
                     }
             else:
                 outside_steps = 0  # Reset outside_steps counter if creature is inside the arena
@@ -240,17 +294,21 @@ class Simulation:
                 return {
                     'collided': self.collision,
                     'collision_time': self.current_time,
-                    'final_position': (entity.x, entity.y),
                     'simulation_time': elapsed_time,
+                    'final_position': (entity.x, entity.y),
                     'emitter_position': (emitter_x, emitter_y),
+                    'behaviour_record': self.behaviour_record(entity),
                 }
-        
+            
+            self.sample_behaviour(entity)
+
         return {
             'collided': self.collision,
             'collision_time': self.collision_time,
-            'final_position': (entity.x, entity.y),
             'simulation_time': elapsed_time,
+            'final_position': (entity.x, entity.y),
             'emitter_position': (emitter_x, emitter_y),
+            'behaviour_record': self.behaviour_record(entity),
         }
 
 # # This is only for testing, otherwise run through index.py

@@ -13,15 +13,15 @@ class Body:
         self.antenna_width = 5
         self.antenna_color = (0, 200, 0)
 
-        self.cilia_size = self.size * 0.1
+        self.cilia_size = self.size * 0.01
         self.cilia_width = 0.25
         self.cilia_color = (0, 200, 0)
 
         self.antennae = []
         self.cilia = []
 
-        self.tail_wiggle_angle = 15 * np.pi / 180  # Maximum wiggle angle deviation
-        self.tail_wiggle_speed = 2  # Speed of the wiggle
+        self.tail_wiggle_angle = 10 * np.pi / 180  # Maximum wiggle angle deviation
+        self.tail_wiggle_speed = 0.5  # Speed of the wiggle
         self.wiggle_phase = 0  # Current phase of the wiggle
         self.tail_angle = 0
 
@@ -70,8 +70,8 @@ class Body:
         # TAIL
         wiggle_effect = np.sin(self.wiggle_phase) * self.tail_wiggle_angle
         self.tail_angle = angle + wiggle_effect
-        tail_length = self.size * 1.5
-        tail_width = self.size * 0.5  # Adjust the width of the tail triangle
+        tail_length = self.size * 1.75
+        tail_width = self.size * 0.75  # Adjust the width of the tail triangle
 
         # Calculate the three vertices of the tail triangle
         tail_tip_x = recessed_x2 - np.cos(self.tail_angle) * tail_length
@@ -91,30 +91,31 @@ class Body:
     def wiggle(self, distance):
         self.wiggle_phase += self.tail_wiggle_speed * distance
 
-    def get_antennae(self, x, y, angle):
+    def get_antennae(self, x, y, angle, forward_offset=6, backward_offset=6):
+        # Calculate the origin points for the antennae
+        front_origin_x = x
+        front_origin_y = y
+        back_origin_x = x - np.cos(angle) * self.size * 0.75
+        back_origin_y = y - np.sin(angle) * self.size * 0.75
+
         # Calculate and update the positions of all antennae based on the current entity position and angle
-        self.L1_antenna_x = x + np.cos(angle + self.antenna_angle) * self.antenna_length
-        self.L1_antenna_y = y + np.sin(angle + self.antenna_angle) * self.antenna_length
-        self.R1_antenna_x = x + np.cos(angle - self.antenna_angle) * self.antenna_length
-        self.R1_antenna_y = y + np.sin(angle - self.antenna_angle) * self.antenna_length
+        self.L1_antenna_x = front_origin_x + np.cos(angle + self.antenna_angle) * self.antenna_length + np.cos(angle) * forward_offset
+        self.L1_antenna_y = front_origin_y + np.sin(angle + self.antenna_angle) * self.antenna_length + np.sin(angle) * forward_offset
+        self.R1_antenna_x = front_origin_x + np.cos(angle - self.antenna_angle) * self.antenna_length + np.cos(angle) * forward_offset
+        self.R1_antenna_y = front_origin_y + np.sin(angle - self.antenna_angle) * self.antenna_length + np.sin(angle) * forward_offset
 
-        recessed_x1 = x - np.cos(angle) * self.size * 0.75
-        recessed_y1 = y - np.sin(angle) * self.size * 0.75
-
-        self.L2_antenna_x = recessed_x1 + np.cos(angle + self.antenna_angle) * self.antenna_length
-        self.L2_antenna_y = recessed_y1 + np.sin(angle + self.antenna_angle) * self.antenna_length
-        self.R2_antenna_x = recessed_x1 + np.cos(angle - self.antenna_angle) * self.antenna_length
-        self.R2_antenna_y = recessed_y1 + np.sin(angle - self.antenna_angle) * self.antenna_length
+        self.L2_antenna_x = back_origin_x + np.cos(angle + self.antenna_angle) * self.antenna_length - np.cos(angle) * backward_offset
+        self.L2_antenna_y = back_origin_y + np.sin(angle + self.antenna_angle) * self.antenna_length - np.sin(angle) * backward_offset
+        self.R2_antenna_x = back_origin_x + np.cos(angle - self.antenna_angle) * self.antenna_length - np.cos(angle) * backward_offset
+        self.R2_antenna_y = back_origin_y + np.sin(angle - self.antenna_angle) * self.antenna_length - np.sin(angle) * backward_offset
 
         # Update antennae list
         self.antennae = [[self.L1_antenna_x, self.L1_antenna_y], [self.R1_antenna_x, self.R1_antenna_y],
-                    [self.L2_antenna_x, self.L2_antenna_y], [self.R2_antenna_x, self.R2_antenna_y]]
+                        [self.L2_antenna_x, self.L2_antenna_y], [self.R2_antenna_x, self.R2_antenna_y]]
 
         return self.antennae
 
-    def get_cilia(self, x, y):
-        # Calculate and update the positions of all cilia based on the c    # Cilia are receptors placed at the tip and halfway point of each antenna
-
+    def get_cilia(self, x, y, angle):
         self.cilia = []
 
         for antenna in self.antennae:
@@ -125,18 +126,18 @@ class Body:
             antenna_dir_x = end_x - start_x
             antenna_dir_y = end_y - start_y
 
-            # Calculate the positions of the two cilia on each antenna
+            # Calculate the positions of the cilia on the antenna
             for i in range(2):
                 cilium_pos = (i + 1) / 2
                 cilium_x = start_x + antenna_dir_x * cilium_pos
                 cilium_y = start_y + antenna_dir_y * cilium_pos
 
                 self.cilia.append((cilium_x, cilium_y))
-        
+
         return self.cilia
 
     def update(self, x, y, angle):
         self.get_antennae(x, y,angle)
-        self.get_cilia(x, y)
+        self.get_cilia(x, y, angle)
 
 

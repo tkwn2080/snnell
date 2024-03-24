@@ -11,16 +11,24 @@ import mlx.core as mx
 
 class Antennae:
     def get_spikes(state, antennae, angle):
-        spikes = [0,0,0,0]
+        spikes = mx.zeros(6, dtype=mx.float32)
         wind = state
-        spikes = Antennae.convert_wind(wind, angle)
+        spikes[:4] = Antennae.convert_wind(wind, angle)
+
+        # Get the head receptor spikes
+        head_receptor_spike1, head_receptor_spike2 = Antennae.get_heading(wind, angle)
+
+        # Assign the head receptor spikes to specific indices in the spikes array
+        spikes[4] = head_receptor_spike1
+        spikes[5] = head_receptor_spike2
+
         return spikes
 
     def convert_wind(wind, entity_angle):
         # Convert wind to membrane potentials
         antenna_angles = mx.array([55, -55, 125, -125]) * (mx.pi / 180)  # Convert angles to radians
         antenna_length = 12 * 5
-        max_windspeed = 80  # Maximum windspeed
+        max_windspeed = 140  # Maximum windspeed
         deformation_coefficient = 0.01  # Coefficient for antenna deformation
         conversion_factor = 1.0  # Conversion factor from deformation to membrane potential
 
@@ -54,6 +62,30 @@ class Antennae:
         normalized_potentials = (membrane_potentials - min_potential) / (max_potential - min_potential)
 
         return normalized_potentials
+
+    def get_heading(wind, entity_angle):
+        # Extract wind direction and speed
+        wind_direction = wind[0]
+        wind_speed = wind[1]
+
+        # Calculate the relative angle between the entity and the wind direction
+        relative_angle = wind_direction - entity_angle
+
+        # Ensure the relative angle is within the range [-pi, pi]
+        relative_angle = (relative_angle + mx.pi) % (2 * mx.pi) - mx.pi
+
+        # Calculate the angle of incidence (in degrees)
+        angle_of_incidence = mx.abs(relative_angle) * 180 / mx.pi
+
+        # Calculate the spike values for the two head receptors
+        if angle_of_incidence <= 90:
+            spike1 = angle_of_incidence / 90
+            spike2 = 1 - spike1
+        else:
+            spike1 = 0
+            spike2 = 0
+
+        return spike1, spike2
 
 
 class Cilia:

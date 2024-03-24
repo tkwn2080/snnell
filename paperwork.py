@@ -3,6 +3,8 @@ import string
 import numpy as np
 import random
 import os
+import shutil
+import datetime
 
 # PAPERWORK
 class Paperwork: 
@@ -39,16 +41,16 @@ class Paperwork:
         emitter_x, emitter_y = simulation_data['emitter_position']
         if simulation_data['collided']:
             collision_time = simulation_data['collision_time']
-            return collision_time
+            return collision_time * 10
         else:
             final_x, final_y = simulation_data['final_position']
             simulation_time = simulation_data['simulation_time']
             final_distance = np.hypot(final_x - emitter_x, final_y - emitter_y)
-            return simulation_time + final_distance * 10
+            return simulation_time * 10 + final_distance * 10
 
     def trial_csv(trial_data):
         trial_csv_filename = './records/trial_data.csv'
-        trial_fieldnames = ['epoch_number', 'trial_number', 'individual_name', 'score', 'type', 'final_x', 'final_y', 'emitter_x', 'emitter_y']
+        trial_fieldnames = ['epoch_number', 'trial_number', 'individual_name', 'novelty_score', 'fitness_score', 'final_x', 'final_y', 'emitter_x', 'emitter_y', 'behaviour_record']
         write_header = not os.path.exists(trial_csv_filename) or os.path.getsize(trial_csv_filename) == 0
 
         with open(trial_csv_filename, 'a', newline='') as trial_csvfile:
@@ -60,3 +62,20 @@ class Paperwork:
     def generate_random_name(length=6):
         letters = string.ascii_lowercase
         return ''.join(random.choice(letters) for i in range(length))
+
+    def move_existing_files():
+        record_dir = './records/'
+        trial_data_file = os.path.join(record_dir, 'trial_data.csv')
+        epoch_data_file = os.path.join(record_dir, 'epoch_data.csv')
+
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        destination_folder = os.path.join(record_dir, timestamp)
+
+        if os.path.exists(trial_data_file) or os.path.exists(epoch_data_file):
+            os.makedirs(destination_folder, exist_ok=True)
+
+            if os.path.exists(trial_data_file):
+                shutil.move(trial_data_file, os.path.join(destination_folder, "trial_data.csv"))
+
+            if os.path.exists(epoch_data_file):
+                shutil.move(epoch_data_file, os.path.join(destination_folder, "epoch_data.csv"))

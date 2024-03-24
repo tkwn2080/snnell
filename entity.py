@@ -12,12 +12,12 @@ class Entity:
         self.x = xy[0]
         self.y = xy[1]
         self.angle = 0
-        self.speed = 1
-        self.response_angle = 1 * (np.pi / 180)
+        self.speed = 30
+        self.response_angle = 30
 
         self.body = Body()
-        self.input_potential = mx.zeros(12, dtype=mx.float32)
-        self.spikes = mx.zeros(12, dtype=mx.float32)
+        self.input_potential = mx.zeros(14, dtype=mx.float32)
+        self.spikes = mx.zeros(14, dtype=mx.float32)
         self.thresholds = mx.ones_like(self.spikes)
         self.counter = 250
 
@@ -28,8 +28,17 @@ class Entity:
         self.particle_count = 0
         self.timesteps_since_touch = 0
 
+        # Movement
+        self.action = False
+        self.action_counter = 3
+        self.forward = 0
+        self.stop = 0
+        self.left = 0
+        self.right = 0
+
         # SNN
         self.network = network
+        self.output = mx.zeros(4, dtype=mx.float32)
 
     def get_entity(self):
         return self.x, self.y, self.angle
@@ -71,39 +80,66 @@ class Entity:
         diffs = mx.abs(values - values[0])
         are_equal = mx.max(diffs) < 1e-6
         if are_equal:
-            # print('beep')
             pass
         else:
             action = mx.argmax(output)
             if action == 0:
-                self.left_turn(self.response_angle)
+                self.action = True
+                self.right = self.action_counter
             elif action == 1:
-                self.straight_ahead(self.movement_counter)
+                self.action = True
+                self.forward = self.action_counter
             elif action == 2:
-                self.straight_ahead(self.movement_counter)
+                self.action = True
+                self.stop = self.action_counter
             elif action == 3:
-                self.right_turn(self.response_angle)
+                self.action = True
+                self.left = self.action_counter
 
+    def movement(self):
+        if self.forward > 0:
+            self.straight_ahead(self.speed / self.action_counter)
+            self.forward -= 1
+            if self.forward == 0:
+                self.action = False
+        elif self.stop > 0:
+            self.stop -= 1
+            if self.stop == 0:
+                self.action = False
+        elif self.left > 0:
+            self.left_turn(self.response_angle /  self.action_counter)
+            self.left -= 1
+            if self.left == 0:
+                self.action = False
+        elif self.right > 0:
+            self.right_turn(self.response_angle / self.action_counter)
+            self.right -= 1
+            if self.right == 0:
+                self.action = False
+        
     def update(self, state):
         self.body.update(self.x, self.y, self.angle)
         if self.counter == 0:
             spikes = mx.array(self.spikes)
-            input_current = []
 
             antennae = self.body.get_antennae(self.x, self.y, self.angle)
-            antennae_spikes = Antennae.get_spikes(state[0], antennae, self.angle)
+            self.input_potential[:len(antennae) + 2] = Antennae.get_spikes(state[0], antennae, self.angle)
 
-            cilia = self.body.get_cilia(self.x, self.y)
-            cilia_spikes = Cilia.get_spikes(state[1], cilia)
+            cilia = self.body.get_cilia(self.x, self.y, self.angle)
+            self.input_potential[len(antennae) + 2:] = Cilia.get_spikes(state[1], cilia) * 2
 
-            input_current.extend(antennae_spikes)
-            input_current.extend(cilia_spikes)
+            input_current = mx.array(self.input_potential)
 
-            input_current = mx.array(input_current)
+            output_current = Network.inject_current(self.network, input_current)
+
+            self.output += output_current
             
-            output = Network.inject_current(self.network, input_current)
-            # print(f'Output: {output}')
-            self.interpret_output(output)
+            if self.action == False:
+                self.interpret_output(self.output)
+                self.output = mx.zeros(4, dtype=mx.float32)
+
+            if self.action == True:
+                self.movement()
 
         # elif self.counter == 10:
         #     self.counter -= 1

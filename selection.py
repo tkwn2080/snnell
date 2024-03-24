@@ -1,171 +1,187 @@
-# This will handle all variants of selections: fitness, novelty, etc.
-# It will also handle the subprotocols such as final rounds for elitism
-import numpy as np
+import mlx.core as mx
 import pandas as pd
+import numpy as np
 import random
+import ast
+
+from simulation import Simulation
+from evolve import Population
 
 class Selection:
-    def __init__(self, selection_type):
+    def __init__(self, selection_type, additional_trials=False, simulation_settings=None):
         self.selection_type = selection_type
+        self.additional_trials = additional_trials
+        self.simulation_settings = simulation_settings
         self.archive = []
         self.novelty_scores = {}
 
         self.elite_size = None
-        self.final_rounds = 20
+        self.final_rounds = 8
 
     def select(self, population, n_individuals):
-        # Select the top n individuals based on fitness or novelty
+        trial_data = self.load_trial_data()
+        self.update_individual_scores(population, trial_data)
+
         if self.selection_type == 'fitness':
-            rankings = self.calculate_fitness(population)
-            top_individuals = rankings[:n_individuals]
+            rankings = self.calculate_fitness_scores(population)
         elif self.selection_type == 'novelty':
-            rankings = self.calculate_novelty(population)
-            top_individuals = rankings[:n_individuals]
+            rankings = self.calculate_novelty_scores(population)
+        elif self.selection_type == 'combined':
+            rankings = self.calculate_combined_scores(population)
+
+        top_individuals = self.select_top_individuals(population, rankings, n_individuals)
 
         print("Top {} individuals:".format(n_individuals))
         for rank, individual in enumerate(top_individuals, start=1):
-            print("Rank {}: {}".format(rank, individual.name))
+            print("Rank {}: {} ({})".format(rank, individual.name, individual.fitness))
 
+        if self.additional_trials:
+            top_individuals = self.run_additional_trials(top_individuals, self.final_rounds)
+
+        return top_individuals, rankings
+
+    def run_additional_trials(self, selected_individuals, n_rounds):
+        print(f"Running additional trials for {n_rounds} rounds")
+        additional_trial_data = []
+        
+        for trial in range(n_rounds):
+            print(f'Trial {trial} of {n_rounds}')
+            for individual in selected_individuals:
+                emitter_x = np.random.randint(900, 1100)
+                if trial % 2:
+                    emitter_y = np.random.randint(-200, -150)
+                else:
+                    emitter_y = np.random.randint(150, 200)
+                trial_data_dict = Simulation(emitter_x, emitter_y, self.simulation_settings['neuron_type'], self.simulation_settings['recurrent']).simulate(
+                    self.simulation_settings['wind_config'],
+                    emitter_x,
+                    emitter_y,
+                    individual,
+                    self.simulation_settings['neuron_type'],
+                    self.simulation_settings['headless'],
+                    self.simulation_settings['recurrent']
+                )
+                trial_data_dict['individual_name'] = individual.name
+                additional_trial_data.append(trial_data_dict)
+        
+        additional_trial_data_df = pd.DataFrame(additional_trial_data)
+        
+        for individual in selected_individuals:
+            individual_trials = additional_trial_data_df[additional_trial_data_df['individual_name'] == individual.name]
+            
+            if self.selection_type == 'fitness' or self.selection_type == 'combined':
+                avg_fitness = individual_trials['fitness_score'].mean()
+                individual.fitness = avg_fitness
+            
+            if self.selection_type == 'novelty' or self.selection_type == 'combined':
+                trial_novelty_scores = [self.calculate_novelty_score(trial, additional_trial_data_df, self.archive) for _, trial in individual_trials.iterrows()]
+                avg_novelty_score = sum(trial_novelty_scores) / len(trial_novelty_scores)
+                individual.novelty_score = avg_novelty_score
+        
+        if self.selection_type == 'fitness':
+            rankings = self.calculate_fitness_scores(selected_individuals)
+        elif self.selection_type == 'novelty':
+            rankings = self.calculate_novelty_scores(selected_individuals)
+        elif self.selection_type == 'combined':
+            rankings = self.calculate_combined_scores(selected_individuals)
+        
+        top_individuals = self.select_top_individuals(selected_individuals, rankings, len(selected_individuals))
         return top_individuals
 
-    def calculate_fitness(self, population):
-        # Load trial data from CSV
-        trial_data = pd.read_csv('records/trial_data.csv')
+    def select_top_individuals(self, population, rankings, n_individuals):
+        sorted_indices = mx.argsort(rankings)[::-1]
+        top_indices = sorted_indices[:n_individuals]
+        top_individuals = [population.individuals[i] for i in top_indices.tolist()]
+        return top_individuals
 
-        # Group trial data by individual
-        grouped_data = trial_data.groupby('individual_name')
+    def calculate_fitness_scores(self, population):
+        fitness_scores = mx.array([individual.fitness for individual in population.individuals], dtype=mx.float32)
+        return fitness_scores
 
-        fitness_scores = {}
-        for individual_name, group in grouped_data:
-            # Calculate average fitness across trials
-            avg_fitness = group['score'].mean()
-            fitness_scores[individual_name] = avg_fitness
+    def calculate_novelty_scores(self, population):
+        novelty_scores = mx.array([individual.novelty_score for individual in population.individuals], dtype=mx.float32)
+        return novelty_scores
 
-        # Sort individuals by fitness scores
-        sorted_individuals = sorted(population.individuals, key=lambda x: fitness_scores.get(x.name, float('-inf')), reverse=True)
-        print(f'Sorted individuals: {sorted_individuals}')
-        return sorted_individuals
+    def calculate_combined_scores(self, population, balance=0.5):
+        fitness_scores = self.calculate_fitness_scores(population)
+        novelty_scores = self.calculate_novelty_scores(population)
 
-    def additional_trials(self, population, n_individuals, n_trials):
-        # Select the top n individuals based on fitness
-        top_individuals = self.calculate_fitness(population)[:n_individuals]
+        min_fitness = mx.min(fitness_scores)
+        max_fitness = mx.max(fitness_scores)
+        normalized_fitness_scores = 1 - ((fitness_scores - min_fitness) / (max_fitness - min_fitness))
 
-        # Run additional trials for the top individuals
-        additional_trial_data = []
-        for individual in top_individuals:
-            for _ in range(n_trials):
-                # Simulate additional trials and collect data
-                trial_data = Simulation.simulate(individual)
-                additional_trial_data.append(trial_data)
+        min_novelty = mx.min(novelty_scores)
+        max_novelty = mx.max(novelty_scores)
+        normalized_novelty_scores = (novelty_scores - min_novelty) / (max_novelty - min_novelty)
 
-        # Calculate average fitness for the additional trials
-        additional_fitness_scores = {}
-        for individual in top_individuals:
-            individual_trials = [trial for trial in additional_trial_data if trial['individual_name'] == individual.name]
-            avg_fitness = sum(trial['score'] for trial in individual_trials) / len(individual_trials)
-            additional_fitness_scores[individual.name] = avg_fitness
-
-        # Reorder the top individuals based on their additional trial performance
-        reordered_individuals = sorted(top_individuals, key=lambda x: additional_fitness_scores.get(x.name, float('-inf')), reverse=True)
-
-        return reordered_individuals
-
-    def calculate_novelty(self, population):
-        # Load trial data from CSV
-        with open('records/trial_data.csv', 'r') as csvfile:
-            trial_data = pd.read_csv(csvfile)
-        
-        # Iterate over each individual in the population
-        for individual in population.individuals:
-            
-            individual_trials = trial_data[trial_data['individual_name'].astype(str) == str(individual.name)]
-            
-            # Calculate novelty score for each trial of the individual
-            for index, trial in individual_trials.iterrows():
-                trial_novelty_score = self.calculate_novelty_score(trial, trial_data, self.archive)
-                trial_data.at[index, 'score'] = trial_novelty_score
-                trial_data.at[index, 'type'] = 'novelty'
-        
-        # Update the archive with the most novel trials
-        self.update_archive(trial_data.to_dict('records'))
-
-        # Update the trial data with novelty scores using the separate method
-        self.update_trial_data_with_novelty_scores(trial_data)
-        
-        novelty_scores = {}
-        for individual in population.individuals:
-            individual_trials = trial_data[trial_data['individual_name'] == individual.name]
-            if not individual_trials.empty:
-                # Calculate the novelty scores for each trial
-                trial_novelty_scores = individual_trials.apply(lambda row: self.calculate_novelty_score(row, trial_data, self.archive), axis=1)
-                
-                # # By mean
-                # mean_novelty_score = trial_novelty_scores.mean()
-                # novelty_scores[individual.name] = mean_novelty_score
-                
-                # # By maximum
-                # max_novelty_score = trial_novelty_scores.max()
-                # novelty_scores[individual.name] = max_novelty_score
-                
-                # By minimum
-                min_novelty_score = trial_novelty_scores.min()
-                novelty_scores[individual.name] = min_novelty_score
-        
-        # Sort individuals by overall novelty scores
-        sorted_individuals = sorted(population.individuals, key=lambda x: novelty_scores.get(x.name, float('-inf')), reverse=True)
-        
-        return sorted_individuals
+        combined_scores = balance * normalized_fitness_scores + (1 - balance) * normalized_novelty_scores
+        return combined_scores
 
     def calculate_novelty_score(self, trial, trial_data, archive):
-        # Calculate the novelty score based on the distance from other individuals in the population and a subset of the archive
-        population_distances = [self.calculate_distance(trial, other_trial) for _, other_trial in trial_data.iterrows() if other_trial['individual_name'] != trial['individual_name']]
-        
-        # Randomly sample a subset of the archive for comparison
-        archive_subset = random.sample(archive, min(len(archive), 100))  # Adjust the sample size as needed
-        archive_distances = [self.calculate_distance(trial, archived_trial) for archived_trial in archive_subset if archived_trial['individual_name'] != trial['individual_name']]
-        
-        total_distances = population_distances + archive_distances
-        if total_distances:
-            novelty_score = sum(total_distances) / len(total_distances)
+        k = 15
+
+        trial_record = mx.array(ast.literal_eval(trial['behaviour_record']), dtype=mx.float32)
+
+        population_trials = trial_data[trial_data['individual_name'] != trial['individual_name']]
+        population_distances = mx.sqrt(mx.sum(mx.square(mx.array([ast.literal_eval(record) for record in population_trials['behaviour_record']], dtype=mx.float32) - trial_record), axis=(1, 2)))
+
+        if archive:
+            archive_trials = pd.DataFrame(archive)
+            archive_distances = mx.sqrt(mx.sum(mx.square(mx.array([ast.literal_eval(record) for record in archive_trials['behaviour_record']], dtype=mx.float32) - trial_record), axis=(1, 2)))
+            total_distances = mx.concatenate((population_distances, archive_distances))
         else:
-            novelty_score = 0
-        
+            total_distances = population_distances
+
+        sorted_distances = mx.sort(total_distances)
+
+        k_nearest_distances = sorted_distances[:k]
+        novelty_score = mx.mean(k_nearest_distances)
+
         return novelty_score
 
     def calculate_distance(self, trial1, trial2):
-        # Calculate the Euclidean distance between two trials based on their final positions
-        x1 = trial1['final_x']
-        y1 = trial1['final_y']
-        x2 = trial2['final_x']
-        y2 = trial2['final_y']
-        distance = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+        record1 = mx.array(trial1['behaviour_record'])
+        record2 = mx.array(trial2['behaviour_record'])
+        distance = mx.sqrt(mx.sum(mx.square(record2 - record1)))
         return distance
 
     def update_archive(self, trials):
-        # Update the archive with the most novel trials
-        # sorted_trials = sorted(trials, key=lambda x: x['novelty_score'], reverse=True)
-        # self.archive = sorted_trials[:len(trials)//2]
-        # print("Updated archive:")
-        # for trial in self.archive:
-        #     print(f"Trial {trial['individual_name']} (Epoch {trial['epoch_number']}, Trial {trial['trial_number']}), Novelty Score: {trial['novelty_score']}")
-
-        # Update the archive with trials based on a percentage chance
-        storage_chance = 0.01
+        storage_chance = 0.02
         for trial in trials:
             if random.random() < storage_chance:
-                # Store only the essential information in the archive
                 archived_trial = {
                     'individual_name': trial['individual_name'],
-                    'final_x': trial['final_x'],
-                    'final_y': trial['final_y']
+                    'behaviour_record': trial['behaviour_record'],
                 }
                 self.archive.append(archived_trial)
 
-    def update_trial_data_with_novelty_scores(self, trial_data):
-        # Update the trial data with novelty scores
-        trial_data['score'] = trial_data['score']
-        trial_data['type'] = 'novelty'
+    def update_trial_data(self, trial_data):
+        if 'novelty_score' in trial_data.columns:
+            trial_data['novelty_score'] = trial_data['novelty_score']
         
-        # Save the updated trial data back to CSV
+        if 'fitness_score' in trial_data.columns:
+            trial_data['fitness_score'] = trial_data['fitness_score']
+        
         with open('records/trial_data.csv', 'w', newline='') as csvfile:
             trial_data.to_csv(csvfile, index=False)
+
+    def load_trial_data(self):
+        with open('records/trial_data.csv', 'r') as csvfile:
+            trial_data = pd.read_csv(csvfile)
+        return trial_data
+
+    def update_individual_scores(self, individuals, trial_data):
+        if isinstance(individuals, Population):
+            individuals = individuals.individuals
+
+        for individual in individuals:
+            individual_trials = trial_data[trial_data['individual_name'].astype(str) == str(individual.name)]
+            
+            if 'fitness_score' in individual_trials.columns:
+                avg_fitness = individual_trials['fitness_score'].mean()
+                individual.fitness = avg_fitness
+
+            if 'novelty_score' in individual_trials.columns:
+                trial_novelty_scores = [self.calculate_novelty_score(trial, trial_data, self.archive) for _, trial in individual_trials.iterrows()]
+                avg_novelty_score = sum(trial_novelty_scores) / len(trial_novelty_scores)
+                individual.novelty_score = avg_novelty_score
