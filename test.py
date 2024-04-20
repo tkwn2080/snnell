@@ -40,9 +40,9 @@ def run_trials(individuals, num_trials, environment, recurrent=False):
         for trial in range(num_trials):
             emitter_x = np.random.randint(900, 1100)
             if trial % 2:
-                emitter_y = np.random.randint(-200, -150)
+                emitter_y = np.random.randint(-150, -100)
             else:
-                emitter_y = np.random.randint(150, 200)
+                emitter_y = np.random.randint(100, 150)
             neuron_type = 'izhikevich'
             simulation = Simulation(emitter_x, emitter_y, neuron_type, recurrent)
             simulation_data = simulation.simulate('constant', emitter_x, emitter_y, individual, neuron_type, headless, recurrent, environment)

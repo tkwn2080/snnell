@@ -41,12 +41,12 @@ class Paperwork:
         emitter_x, emitter_y = simulation_data['emitter_position']
         if simulation_data['collided']:
             collision_time = simulation_data['collision_time']
-            return collision_time * collision_time
+            return collision_time * collision_time * 10
         else:
             final_x, final_y = simulation_data['final_position']
             simulation_time = simulation_data['simulation_time']
             final_distance = np.hypot(final_x - emitter_x, final_y - emitter_y)
-            return (final_distance * final_distance) / 100
+            return (final_distance * final_distance) / 10
 
     def trial_csv(trial_data):
         trial_csv_filename = './records/trial_data.csv'

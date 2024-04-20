@@ -12,8 +12,8 @@ class Entity:
         self.x = xy[0]
         self.y = xy[1]
         self.angle = 0
-        self.speed = 15
-        self.response_angle = 30 * mx.pi / 180
+        self.speed = 9
+        self.response_angle = 15 * mx.pi / 180
 
         self.body = Body()
         self.input_potential = mx.zeros(14, dtype=mx.float32)
@@ -30,7 +30,7 @@ class Entity:
 
         # Movement
         self.action = False
-        self.action_counter = 3
+        self.action_counter = 1
         self.forward = 0
         self.stop = 0
         self.left = 0
@@ -38,7 +38,7 @@ class Entity:
 
         # SNN
         self.network = network
-        self.output = mx.zeros(4, dtype=mx.float32)
+        self.output = mx.zeros(3, dtype=mx.float32)
 
     def get_entity(self):
         return self.x, self.y, self.angle
@@ -76,46 +76,71 @@ class Entity:
         #     self.right_turn(turn_angle)
 
         # Select the appropriate action based on the maximum output value
-        values = mx.softmax(output)
-        diffs = mx.abs(values - values[0])
-        are_equal = mx.max(diffs) < 1e-6
-        if are_equal:
-            pass
-        else:
-            action = mx.argmax(output)
-            if action == 0:
-                self.action = True
-                self.right = self.action_counter
-            elif action == 1:
-                self.action = True
-                self.forward = self.action_counter
-            elif action == 2:
-                self.action = True
-                self.stop = self.action_counter
-            elif action == 3:
-                self.action = True
-                self.left = self.action_counter
+        # values = mx.softmax(output)
+        # diffs = mx.abs(values - values[0])
+        # are_equal = mx.max(diffs) < 1e-6
+        # if are_equal:
+        #     pass
+        # else:
+        #     action = mx.argmax(output)
+        #     if action == 0:
+        #         self.action = True
+        #         self.right = self.action_counter
+        #     elif action == 1:
+        #         self.action = True
+        #         self.forward = self.action_counter
+        #     elif action == 2:
+        #         self.action = True
+        #         self.stop = self.action_counter
+        #     elif action == 3:
+        #         self.action = True
+        #         self.left = self.action_counter
+
+        if output[0] > 0:
+            self.right += output[0] * self.action_counter
+            output[0] = 0
+        if output[1] > 0:
+            self.forward += output[1] * self.action_counter
+            output[1] = 0
+        # if output[2] > 0:
+        #     # self.stop += output[2] * self.action_counter
+        #     output[2] = 0
+        if output[2] > 0:
+            self.left += output[2] * self.action_counter
+            output[2] = 0
 
     def movement(self):
-        if self.forward > 0:
-            self.straight_ahead(self.speed / self.action_counter)
-            self.forward -= 1
-            if self.forward == 0:
-                self.action = False
-        elif self.stop > 0:
+        if self.stop > 0:
             self.stop -= 1
             if self.stop == 0:
                 self.action = False
-        elif self.left > 0:
-            self.left_turn(self.response_angle /  self.action_counter)
-            self.left -= 1
-            if self.left == 0:
-                self.action = False
-        elif self.right > 0:
-            self.right_turn(self.response_angle / self.action_counter)
-            self.right -= 1
-            if self.right == 0:
-                self.action = False
+        else:
+            if self.forward > 0:
+                self.straight_ahead(self.speed / self.action_counter)
+                self.forward -= 1
+                if self.forward == 0:
+                    self.action = False
+        if self.left > 0 and self.right > 0:
+            if self.left == self.right:
+                self.left = 0
+                self.right = 0
+            elif self.left > self.right:
+                self.left_turn(self.response_angle /  self.action_counter)
+                self.left -= 1
+            elif self.right > self.left:
+                self.right_turn(self.response_angle / self.action_counter)
+                self.right -= 1
+        else:
+            if self.left >= 1:
+                self.left_turn(self.response_angle /  self.action_counter)
+                self.left -= 1
+                if self.left == 0:
+                    self.action = False
+            if self.right >= 1:
+                self.right_turn(self.response_angle / self.action_counter)
+                self.right -= 1
+                if self.right == 0:
+                    self.action = False
         
     def update(self, state):
         self.body.update(self.x, self.y, self.angle)
@@ -130,16 +155,20 @@ class Entity:
 
             input_current = mx.array(self.input_potential)
 
-            output_current = Network.inject_current(self.network, input_current)
+            network_output = Network.inject_current(self.network, input_current)
 
-            self.output += output_current
+            self.output += network_output
+
+            self.interpret_output(self.output)
+            self.output = mx.zeros(3, dtype=mx.float32)
+            self.movement()
             
-            if self.action == False:
-                self.interpret_output(self.output)
-                self.output = mx.zeros(4, dtype=mx.float32)
+            # if self.action == False:
+            #     self.interpret_output(self.output)
+            #     self.output = mx.zeros(3, dtype=mx.float32)
 
-            if self.action == True:
-                self.movement()
+            # if self.action == True:
+            #     self.movement()
 
         # elif self.counter == 10:
         #     self.counter -= 1

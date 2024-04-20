@@ -26,9 +26,9 @@ def simulate_individual(individual, population_index, population_size, epoch, nu
         emitter_x = np.random.randint(900, 1100)
 
         if trial % 2:
-            emitter_y = np.random.randint(-200, -150)
+            emitter_y = np.random.randint(-150, -100)
         else:
-            emitter_y = np.random.randint(150, 200)
+            emitter_y = np.random.randint(100, 150)
 
         neuron_type = 'izhikevich'
         simulation = Simulation(emitter_x, emitter_y, neuron_type, recurrent)
@@ -67,7 +67,6 @@ def parallel_simulations(population, epoch, num_epochs, num_trials, num_processe
             futures = []
             for index, individual in enumerate(population.individuals):
                 headless = True
-                print(f"Simulating {individual.name}: Mutation History: {individual.mutation_history}")
                 futures.append(executor.submit(simulate_individual, individual, index, len(population.individuals), epoch, num_epochs, num_trials, headless, mode, recurrent))
             
             epoch_data = []
@@ -81,7 +80,7 @@ def parallel_simulations(population, epoch, num_epochs, num_trials, num_processe
         sys.exit()
 
 def breeding_program(population, reproduction_rate, epoch, num_epochs, recurrent):
-    mutation_strength = 0.1 - (0.009 * (epoch / num_epochs))
+    mutation_strength = 0.2 - (0.18 * (epoch / num_epochs))
     new_individuals = []
     for individual in population.individuals:
         for _ in range(reproduction_rate):
@@ -113,12 +112,6 @@ def evolutionary_system(environment, population, selection, selector, progeny, e
 
         selected_individuals, rankings = selector.select(population, selection)
 
-        print(f'Mutation history for selected individuals:')
-        for individual in selected_individuals:
-            print(f'Type of individual: {type(individual)}')
-            print(f'{individual.name}: {individual.mutation_history}')
-
-        print(f'Selected individuals: {selected_individuals}')
         survivors = Population(selection, population.individuals[0].architecture, recurrent, individuals=selected_individuals)
 
     elif mode == 'continue':
@@ -147,26 +140,26 @@ def main():
         headless = False
 
     # Set number of generations
-    num_epochs = 30
+    num_epochs = 40
 
     # Set number of trials for each individual within a generation 
-    num_trials = 2
+    num_trials = 4
 
     # Set initial population size
     population_size = 200
 
     # Set subsequent population dynamics
-    selection = 5
-    progeny = 20
+    selection = 8
+    progeny = 25
 
-    # Set architecture: input and output must be 12 and 4 respectively
-    architecture = [14,80,80,80,40,4]
+    # Set architecture: input and output must be 12 and 3 respectively
+    architecture = [14,100,200,300,200,100,40,3]
 
     # Set recurrence
     recurrent = True
 
     # Set selection type
-    selection_type = 'novelty'
+    selection_type = 'combined'
     additional_trials = False
 
     # Setup population, simulation, and selection

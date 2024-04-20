@@ -52,15 +52,11 @@ class Population:
 
 class Evolution:
     def reproduction(individual, mutation_strength):
-        print(f'Individual: {individual}')
         mutation_seed = random.randint(0, int(1e6))
         new_individual = copy.deepcopy(individual)
         new_individual.name = Paperwork.generate_random_name()
-        print(f'Mutation history for individual {individual.name}: {individual.mutation_history}')
         new_individual.mutation_history = individual.mutation_history.copy()
-        print(f'Mutation history for new individual {new_individual.name}: {new_individual.mutation_history}')
-        new_individual.mutation_history.append([mutation_seed, mutation_strength])  # Append the new mutation
-        print(f'Appended mutation history for new individual {new_individual.name}: {new_individual.mutation_history}')
+        new_individual.mutation_history.append([mutation_seed, mutation_strength])
         return new_individual
 
     def mutation(weights, recurrent_weights, mutation_seed, mutation_strength):

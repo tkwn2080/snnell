@@ -14,13 +14,18 @@ class Simulation:
         self.arena_size_y = 800
         self.wind_speed = 140
         self.wind_direction = mx.array(180 * mx.pi / 180)
-        self.puff_birth_rate = 1.0
+        self.puff_birth_rate = 0.25
         self.puff_init_radius = 0.05
-        self.puff_init_concentration = 100
-        self.diffusion_rate = 0.4
+        self.puff_init_concentration = 10000
+        self.diffusion_rate = 0.5
         self.random_walk_scale = 3
         self.time_step = 0.01
         self.max_time = 15
+
+        # STALLED
+        self.stalled_time = 500
+        self.stalled_counter = 0
+        self.last_position = None
 
         # COLLISION
         self.collision = False
@@ -67,7 +72,7 @@ class Simulation:
         self.start_time = time.time()
 
         # MLX IMPLEMENTATION
-        self.max_puffs = 5000
+        self.max_puffs = 2000
         self.active_puffs = 0
 
         self.puffs = {
@@ -192,7 +197,7 @@ class Simulation:
             standardized_y = sample[1] - self.origin_y
             
             # Create a new standardized sample
-            standardized_sample = [standardized_x, standardized_y] + list(sample[2:])
+            standardized_sample = [standardized_x, standardized_y] + list(sample[2:]) # Removed angle
             
             self.record_data.append(standardized_sample)
 
@@ -207,7 +212,7 @@ class Simulation:
                 standardized_y = record[1] - self.origin_y
                 
                 # Create a new standardized record
-                standardized_record = [standardized_x, standardized_y] + list(record[2:])
+                standardized_record = [standardized_x, standardized_y] + list(record[2:]) # Removed angle
                 
                 self.record_data.append(standardized_record)
             
@@ -226,7 +231,7 @@ class Simulation:
         self.current_time = 0
         puff_counter = 0
         outside_steps = 0  # Initialize outside_steps counter
-        max_outside_steps = 50
+        max_outside_steps = 100
 
         if not headless:
             screen, clock = environment
@@ -287,6 +292,24 @@ class Simulation:
                     }
             else:
                 outside_steps = 0  # Reset outside_steps counter if creature is inside the arena
+            
+            # Check if the creature has stalled
+            if self.last_position is None:
+                self.last_position = (entity.x, entity.y)
+            elif self.last_position == (entity.x, entity.y):
+                self.stalled_counter += 1
+            else:
+                self.stalled_counter = 0
+                self.last_position = (entity.x, entity.y)
+            if self.stalled_counter > self.stalled_time:
+                return {
+                    'collided': self.collision,
+                    'collision_time': self.collision_time,
+                    'simulation_time': elapsed_time,
+                    'final_position': (entity.x, entity.y),
+                    'emitter_position': (emitter_x, emitter_y),
+                    'behaviour_record': self.behaviour_record(entity),
+                }
 
             self.collision = self.check_collision(entity, emitter_x, emitter_y)
             if self.collision:

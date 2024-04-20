@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import random
 import ast
+from scipy.spatial import kdtree
 
 from simulation import Simulation
 from evolve import Population
@@ -29,7 +30,7 @@ class Selection:
         elif self.selection_type == 'combined':
             rankings = self.calculate_combined_scores(population)
 
-        top_individuals = self.select_top_individuals(population, rankings, n_individuals)
+        top_individuals = self.select_top_individuals(population, rankings, n_individuals, self.selection_type)
 
         print("Top {} individuals:".format(n_individuals))
         for rank, individual in enumerate(top_individuals, start=1):
@@ -90,13 +91,18 @@ class Selection:
         elif self.selection_type == 'combined':
             rankings = self.calculate_combined_scores(selected_individuals)
         
-        top_individuals = self.select_top_individuals(selected_individuals, rankings, len(selected_individuals))
+        top_individuals = self.select_top_individuals(selected_individuals, rankings, len(selected_individuals), self.selection_type)
         return top_individuals
 
-    def select_top_individuals(self, population, rankings, n_individuals):
-        sorted_indices = mx.argsort(rankings)[::-1]
+    def select_top_individuals(self, population, rankings, n_individuals, type):
+        if type == 'fitness':
+            sorted_indices = mx.argsort(rankings)
+        else:
+            sorted_indices = mx.argsort(rankings)[::-1]
+        
         top_indices = sorted_indices[:n_individuals]
         top_individuals = [population.individuals[i] for i in top_indices.tolist()]
+        
         return top_individuals
 
     def calculate_fitness_scores(self, population):
@@ -128,18 +134,23 @@ class Selection:
         trial_record = mx.array(ast.literal_eval(trial['behaviour_record']), dtype=mx.float32)
 
         population_trials = trial_data[trial_data['individual_name'] != trial['individual_name']]
-        population_distances = mx.sqrt(mx.sum(mx.square(mx.array([ast.literal_eval(record) for record in population_trials['behaviour_record']], dtype=mx.float32) - trial_record), axis=(1, 2)))
+        population_records = mx.array([ast.literal_eval(record) for record in population_trials['behaviour_record']], dtype=mx.float32)
 
         if archive:
             archive_trials = pd.DataFrame(archive)
-            archive_distances = mx.sqrt(mx.sum(mx.square(mx.array([ast.literal_eval(record) for record in archive_trials['behaviour_record']], dtype=mx.float32) - trial_record), axis=(1, 2)))
-            total_distances = mx.concatenate((population_distances, archive_distances))
+            archive_records = mx.array([ast.literal_eval(record) for record in archive_trials['behaviour_record']], dtype=mx.float32)
+            total_records = mx.concatenate((population_records, archive_records))
         else:
-            total_distances = population_distances
+            total_records = population_records
 
-        sorted_distances = mx.sort(total_distances)
+        # Create a KD Tree from the total records
+        kd_tree = KDTree(total_records.reshape(total_records.shape[0], -1))
 
-        k_nearest_distances = sorted_distances[:k]
+        # Query the KD Tree for the k nearest neighbors
+        _, indices = kd_tree.query(trial_record.reshape(1, -1), k=k)
+
+        # Retrieve the distances of the k nearest neighbors
+        k_nearest_distances = mx.sqrt(mx.sum(mx.square(total_records[indices] - trial_record), axis=(1, 2)))
         novelty_score = mx.mean(k_nearest_distances)
 
         return novelty_score

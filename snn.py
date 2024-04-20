@@ -167,7 +167,7 @@ class Network:
                 else:
                     self.layers.append(Layer(dim[i], dim[i+1], weights[i]))
 
-    def forward(self, spikes, type):
+    def forward(self, spikes, output_type):
         for i, layer in enumerate(self.layers[:-1]):  # Iterate over all layers except the output layer
             if i == 0:  # Input layer
                 spikes = layer.forward(spikes)
@@ -177,20 +177,47 @@ class Network:
                 self.recurrent_outputs[i] = spikes
         
         output_layer = self.layers[-1]  # Get the output layer
-        if type == 'spikes':
+        if output_type == 'spikes':
             output = output_layer.forward(spikes)  # Apply forward method to the output layer
             return output
-        elif type == 'mem_p':
+        elif output_type == 'mem_p':
             output = output_layer.output(spikes)  # Apply output method to the output layer
             return output
 
     def inject_current(self, input_currents):
+        # Set number of timesteps
+        num_timesteps = 4
+
+        # Set output type: spikes or mem_p
+        output_type = 'spikes'
+        
+        # Initialize output spike buffer
+        output_spike_buffer = []
+        
         # Pass the input currents directly to the input layer
         input_layer = self.layers[0]
-        input_layer.add_current(input_currents)
         
-        # Call the forward method to propagate the spikes through the network
-        output_spikes = self.forward(mx.zeros((input_layer.v.shape[0],), dtype=mx.float32), 'mem_p')
+        for _ in range(num_timesteps):
+            input_layer.add_current(input_currents)
+            
+            # Call the forward method to propagate the spikes through the network
+            output_spikes = self.forward(mx.zeros((input_layer.v.shape[0],), dtype=mx.float32), output_type)
+            
+            # Accumulate output spikes in the buffer
+            output_spike_buffer.append(output_spikes)
+        
+        # Process the output spike buffer
+        output_spikes = self.process_output_spikes(output_spike_buffer)
+        
+        return output_spikes
+
+    def process_output_spikes(self, output_spike_buffer):
+        # Approach 1: Set output spikes to a maximum of one
+        # output_spikes = mx.max(mx.stack(output_spike_buffer), axis=0)
+        
+        # Approach 2: Accumulate output spikes as discrete integers
+        output_spikes = mx.sum(mx.stack(output_spike_buffer), axis=0)
+        # print(f'Summed output spikes: {output_spikes}')
         
         return output_spikes
         
