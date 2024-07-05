@@ -200,20 +200,36 @@ class Simulation:
 
     def draw_puffs(self, screen):
         active_mask = self.puffs.puffs['time'] >= 0
-        numeric_mask = active_mask.astype(mx.int32)
+        numeric_mask = active_mask.astype(mx.float32)
 
-        x_positions = (self.puffs.puffs['x'] * numeric_mask).tolist()
-        y_positions = ((self.puffs.puffs['y'] + self.config.arena_size_y / 2) * numeric_mask).tolist()
-        radii = (self.puffs.puffs['radius'] * numeric_mask).tolist()
-        concentrations = (self.puffs.puffs['concentration'] * numeric_mask).tolist()
+        x_positions = self.puffs.puffs['x'] * numeric_mask
+        y_positions = self.puffs.puffs['y'] * numeric_mask + self.config.arena_size_y / 2
+        radii = self.puffs.puffs['radius'] * numeric_mask
+        concentrations = self.puffs.puffs['concentration'] * numeric_mask
 
-        for x, y, radius, concentration in zip(x_positions, y_positions, radii, concentrations):
+        max_concentration = self.config.puff_init_concentration
+        
+        # Vectorized color calculation
+        color_values = mx.minimum(mx.maximum(mx.floor(255 * (concentrations / max_concentration)), 0), 255).astype(mx.uint8)
+        
+        # Convert to numpy for pygame compatibility
+        x_positions_np = x_positions.astype(mx.int32).tolist()
+        y_positions_np = y_positions.astype(mx.int32).tolist()
+        radii_np = (radii * 100).astype(mx.int32).tolist()
+        color_values_np = color_values.tolist()
+
+        # Create surface for all puffs
+        puff_surface = pygame.Surface((self.config.arena_size_x, self.config.arena_size_y), pygame.SRCALPHA)
+
+        # Draw all puffs at once
+        for x, y, radius, color_value in zip(x_positions_np, y_positions_np, radii_np, color_values_np):
             if radius > 0:
-                puff_color = (255, 255, 255)
-                puff_radius = int(radius * 100)
-                puff_pos = (int(x), int(y))
-                pygame.draw.circle(screen, puff_color, puff_pos, puff_radius)
+                pygame.draw.circle(puff_surface, (color_value, color_value, color_value), (int(x), int(y)), radius)
 
+        # Blit puff surface to main screen
+        screen.blit(puff_surface, (0, 0))
+
+        # Draw source
         source_color = (255, 0, 0)
         source_pos = (self.config.source_x, int(self.config.source_y + self.config.arena_size_y/2))
         pygame.draw.circle(screen, source_color, source_pos, self.config.target_radius)

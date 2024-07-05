@@ -3,6 +3,7 @@ import mlx.core as mx
 def collect_state(entity, environment):
     antennae_state = get_antennae_state(entity, environment)
     cilia_state = get_cilia_state(entity, environment)
+
     return mx.concatenate([antennae_state, cilia_state])
 
 def get_antennae_state(entity, environment):
@@ -43,42 +44,52 @@ def convert_wind(wind, entity_angle):
 def get_heading(wind, entity_angle):
     wind_direction, wind_speed = wind.direction, wind.speed
     relative_angle = (wind_direction - entity_angle + mx.pi) % (2 * mx.pi) - mx.pi
-    angle_of_incidence = mx.abs(relative_angle) * 180 / mx.pi
-
-    if angle_of_incidence <= 90:
-        spike1 = angle_of_incidence / 90
-        spike2 = 1 - spike1
-    else:
-        spike1 = spike2 = 0
-
-    return spike1, spike2
-
-def get_cilia_state(entity, environment):
-    puffs = environment['puffs']
-    cilia_positions = entity.body.get_cilia_positions()
     
-    concentrations = mx.array([
-        get_concentration(puffs, x, y)
-        for x, y in cilia_positions
-    ])
+    # If relative_angle is between -pi/2 and pi/2, wind is coming from the front
+    # Otherwise, it's coming from the back
+    is_front = mx.abs(relative_angle) <= mx.pi/2
     
-    return convert_concentrations(concentrations)
+    front_force = mx.where(is_front, mx.cos(relative_angle), 0)
+    back_force = mx.where(is_front, 0, -mx.cos(relative_angle))
+    
+    return front_force, back_force
 
 def get_concentration(puffs, x, y):
     active_mask = puffs['time'] >= 0
     numeric_mask = active_mask.astype(mx.float32)
 
     dx = puffs['x'] - x
-    dy = puffs['y'] - (y - 400)  # Adjusting y as in the original code
-    center_distances = mx.sqrt(dx**2 + dy**2)
-    distances = center_distances - puffs['radius'] * 100
+    dy = puffs['y'] - (y - 500)  # Adjust y to match the puff coordinate system
+    distances = mx.sqrt(dx**2 + dy**2)
 
-    overlap_mask = distances <= puffs['radius']
-    concentrations = puffs['concentration'] * overlap_mask * numeric_mask
+    # Use the same radius scaling as in drawing
+    scaled_radius = puffs['radius'] * 100
 
-    return mx.sum(concentrations)
+    within_radius = distances <= scaled_radius
+    
+    # Get the maximum concentration from puffs within radius
+    concentrations = mx.where(within_radius, puffs['concentration'], 0) * numeric_mask
+    max_concentration = mx.max(concentrations)
 
-def convert_concentrations(concentrations):
-    epsilon = 1e-8
-    total_concentration = mx.sum(concentrations) + epsilon
-    return mx.divide(concentrations, total_concentration)
+    return max_concentration
+
+def convert_concentrations(concentrations, initial_concentration):
+    # Normalize concentrations based on initial concentration
+    normalized_concentrations = concentrations / initial_concentration
+    
+    # Clip values to ensure they're between 0 and 1
+    return mx.clip(normalized_concentrations, 0, 1)
+
+def get_cilia_state(entity, environment):
+    puffs = environment['puffs']
+    cilia_positions = entity.body.get_cilia_positions()
+    initial_concentration = 10000
+    
+    concentrations = mx.array([
+        get_concentration(puffs, x, y)
+        for x, y in cilia_positions
+    ])
+    
+    normalized_concentrations = convert_concentrations(concentrations, initial_concentration)
+    
+    return normalized_concentrations

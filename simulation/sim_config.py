@@ -6,7 +6,7 @@ class SimulationConfig:
 
         # Target settings
         self.target_radius = 20
-        self.target_hitbox = 20
+        self.target_hitbox = 50
         self.source_x = 1000
         self.source_y = 0
 
@@ -24,7 +24,7 @@ class SimulationConfig:
         self.puff_birth_rate = 0.20
         self.puff_init_radius = 0.3
         self.puff_init_concentration = 10000
-        self.diffusion_rate = 0.2
+        self.diffusion_rate = 0.15
         self.random_walk_scale = 3
         self.max_puffs = 2500
 

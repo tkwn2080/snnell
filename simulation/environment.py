@@ -69,5 +69,5 @@ class PuffSystem:
 
         radius_increase = self.config.diffusion_rate * time_step * mx.random.normal(shape=[self.config.max_puffs], loc=1, scale=0.2)
         self.puffs['radius'] += radius_increase * numeric_mask
-        self.puffs['concentration'] = (self.config.puff_init_radius / self.puffs['radius']) ** 3 * self.config.puff_init_concentration * numeric_mask
+        self.puffs['concentration'] = (self.config.puff_init_radius / self.puffs['radius']) ** 2 * self.config.puff_init_concentration * numeric_mask
 

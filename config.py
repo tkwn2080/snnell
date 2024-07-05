@@ -14,7 +14,7 @@ CONFIG = {
         'recurrent': {
             'n_receptors': 10,
             'n_hidden': 50,
-            'n_layers': 2,
+            'n_layers': 4,
             'n_out': 3,
             'sequence_n': 12,
         },
@@ -40,11 +40,11 @@ CONFIG = {
             'n_actions': 3,
         },
         'actor_critic': {
-            'learning_rate': 0.001,
+            'learning_rate': 0.0002,
             'gamma': 0.99,
             'n_actions': 3,
             'critic_coefficient': 0.5,
-            'entropy_coefficient': 0.02,
+            'entropy_coefficient': 0.01,
             'max_grad_norm': 0.5,
         },
     },

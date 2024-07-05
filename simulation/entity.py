@@ -18,9 +18,8 @@ class Entity:
         # Network parameters
         self.handler = None
 
-        # This is a janky fix for the target being off by 500 in the y direction???!??!
+        # Target location
         self.target = [self.config.target_x, self.config.target_y]
-        self.target[1] -= 500
 
         # Create a Body
         self.body = Body()
@@ -30,10 +29,12 @@ class Entity:
         self.delay = 300
 
         # Tracking for reward calculation
-        self.highest_concentration = 0.0
-        self.last_concentration = 0.0
-        self.last_reward_position = None
-        self.movement_threshold = 4.0
+        self.closest_distance = float('inf')
+        self.last_distance = float('inf')
+        self.last_position = (self.x, self.y)
+        self.last_concentration = 0
+        self.highest_concentration = 0
+        self.plume_following_score = 0
         self.static_count = 0
         self.time_step = 0
         self.time_penalty_factor = 0.01
@@ -54,7 +55,7 @@ class Entity:
 
         # Get new state and calculate reward
         new_state = collect_state(self, environment)
-        reward = self.calculate_reward(new_state)
+        reward = self.calculate_reward(new_state, environment)
 
         # Update the handler
         self.handler.update(reward, new_state, done=False)
@@ -71,8 +72,7 @@ class Entity:
         elif action == 2:  # Move forward
             self.move_forward(self.speed)
         else:  # Stay still
-            print('Stay still')
-            pass  # Do nothing
+            pass
 
         self.body.update(self.x, self.y, self.angle)
 
@@ -95,66 +95,70 @@ class Entity:
     def draw(self, screen):
         self.body.draw(screen, self.x, self.y, self.angle)
 
-    def calculate_reward(self, state):
-        # Get the maximum concentration from all receptors
-        current_concentration = mx.max(state[-4:]).item()
-
-        # Calculate current distance to target
-        current_distance = self.calculate_distance_to_source()
-
-        # Check if we've moved enough towards the target to consider a reward
+    def calculate_reward(self, state, environment):
         current_position = (self.x, self.y)
-        if self.last_reward_position is None:
-            self.last_reward_position = current_position
-            self.highest_concentration = current_concentration
-            return 0  # No reward on first calculation
-
-        # Calculate movement towards the target
-        last_distance_to_target = self.calculate_distance_to_source(self.last_reward_position)
-        movement_towards_target = last_distance_to_target - current_distance
+        current_distance = self.calculate_distance_to_source()
+        current_concentration = self.get_current_concentration(state)
 
         # Initialize reward
         reward = 0
 
-        # Reward for achieving new highest concentration
-        if current_concentration > self.highest_concentration:
-            concentration_improvement = current_concentration - self.highest_concentration
-            reward += 50 * concentration_improvement  # Significant reward for new highest concentration
-            self.highest_concentration = current_concentration
+        # Reward for getting closer to the source
+        if current_distance < self.closest_distance:
+            improvement = self.closest_distance - current_distance
+            reward += 5 * improvement  # Significant reward for new closest approach
+            self.closest_distance = current_distance
 
-        # Reward for moving towards higher concentration (only if above the previous highest)
-        if current_concentration > self.last_concentration and current_concentration >= self.highest_concentration:
-            reward += 10 * (current_concentration - self.last_concentration)
+        # Reward for following the plume
+        plume_reward = self.calculate_plume_following_reward(current_concentration, current_distance)
+        reward += plume_reward
 
-        # Penalty for not moving enough
-        if movement_towards_target < self.movement_threshold:
+        # Penalty for not moving
+        if current_position == self.last_position:
             self.static_count += 1
             reward -= 0.1 * self.static_count
         else:
             self.static_count = 0
-
-        # Reward for moving towards the target (if concentration is increasing)
-        if movement_towards_target > 0 and current_concentration > self.last_concentration:
-            reward += 5 * movement_towards_target
-
-        # Penalty for moving away from the target when concentration is zero
-        if current_concentration == 0 and movement_towards_target < 0:
-            reward -= 5
 
         # Apply time-based penalty
         time_penalty = self.time_penalty_factor * self.time_step
         reward -= time_penalty
 
         # Update tracking variables
+        self.last_distance = current_distance
+        self.last_position = current_position
         self.last_concentration = current_concentration
-        self.last_reward_position = current_position
 
-        return reward
+        return np.clip(reward, -10, 20)
 
-    def calculate_distance_to_source(self, position=None):
-        # Calculate Euclidean distance to the source
-        if position is None:
-            position = (self.x, self.y)
-        dx = position[0] - self.target[0]
-        dy = position[1] - self.target[1]
+    def get_current_concentration(self, state):
+        # Assuming the last 4 elements of the state are the cilia concentrations
+        return mx.sum(state[-4:]).item()
+
+    def calculate_plume_following_reward(self, current_concentration, current_distance):
+        concentration_change = current_concentration - self.last_concentration
+        distance_change = self.last_distance - current_distance
+
+        if concentration_change > 0:
+            # Reward for moving towards higher concentration
+            self.plume_following_score += 1
+            if current_concentration > self.highest_concentration:
+                self.highest_concentration = current_concentration
+                return 10  # Bonus for finding new highest concentration
+            return 5
+        elif concentration_change < 0 and distance_change > 0:
+            # Small reward for moving towards source even if concentration decreases
+            self.plume_following_score += 0.5
+            return 2
+        elif concentration_change < 0 and distance_change < 0:
+            # Penalty for moving away from source and losing concentration
+            self.plume_following_score -= 1
+            return -5
+        else:
+            # No change or other scenarios
+            return 0
+
+    def calculate_distance_to_source(self):
+        dx = self.x - self.target[0]
+        dy = self.y - self.target[1]
         return np.sqrt(dx**2 + dy**2)

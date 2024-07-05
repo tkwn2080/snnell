@@ -143,7 +143,7 @@ class FitnessTracker:
         plt.title(f'Fitness over Training Run {self.run_id}')
         plt.legend()
         plt.grid(True)
-        plt.savefig(f"fitness_plot_{self.run_id}.png")
+        plt.savefig(f"./records/fitness_plot_at_{time.strftime('%Y-%m-%d_%H-%M')}_{self.run_id}.png")
         plt.close()
 
 if __name__ == "__main__":
