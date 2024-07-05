@@ -1,0 +1,9 @@
+numpy
+pandas
+pygame
+tqdm
+torch
+mlx
+scipy
+
+

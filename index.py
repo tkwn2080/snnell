@@ -1,201 +1,150 @@
-import sys
-import numpy as np
-import time
-from tqdm import tqdm
-import pygame
-
-from evolve import Individual, Population, Evolution
-from snn import Network
-from simulation import Simulation
-from paperwork import Paperwork
-from selection import Selection
-
+import os
 import multiprocessing
-import concurrent.futures
-from concurrent.futures import ProcessPoolExecutor
+import pygame
+from config import CONFIG
+from handler import Handler
+from simulation.simulation import Simulation
+from simulation.sim_config import SimulationConfig
 
-# SIMULATION
-def simulate_individual(individual, population_index, population_size, epoch, num_epochs, num_trials, headless, mode, recurrent, environment=None):
-
-
-    # Run trials and calculate average fitness
-    total_fitness = 0
-    total_trials = num_trials
-    all_trial_data = []
-    for trial in range(total_trials):
-        emitter_x = np.random.randint(900, 1100)
-
-        if trial % 2:
-            emitter_y = np.random.randint(-150, -100)
-        else:
-            emitter_y = np.random.randint(100, 150)
-
-        neuron_type = 'izhikevich'
-        simulation = Simulation(emitter_x, emitter_y, neuron_type, recurrent)
-        simulation_data = simulation.simulate('constant', emitter_x, emitter_y, individual, neuron_type, headless, environment, recurrent)
-        
-        fitness = Paperwork.calculate_fitness(simulation_data)
-        # individual.fitness.append(fitness)
-
-        trial_data = {
-            'epoch_number': epoch + 1,
-            'trial_number': trial + 1,
-            'individual_name': individual.name,
-            'fitness_score': fitness,
-            'final_x': simulation_data['final_position'][0],
-            'final_y': simulation_data['final_position'][1],
-            'emitter_x': simulation_data['emitter_position'][0],
-            'emitter_y': simulation_data['emitter_position'][1],
-            'behaviour_record': simulation_data['behaviour_record'],
-        }
-
-        Paperwork.trial_csv(trial_data)
-
-        all_trial_data.append(trial_data)
-        total_fitness += fitness
-
-    avg_fitness = total_fitness / total_trials
-    individual.avg_fitness = avg_fitness
-
-    epoch_data = {'epoch': epoch, 'name': individual.name, 'seed': individual.initial_seed, 'avg_fitness': individual.avg_fitness, 'heritage': individual.mutation_history}
-    return epoch_data
-
-def parallel_simulations(population, epoch, num_epochs, num_trials, num_processes, mode, recurrent):
-    # Use ProcessPoolExecutor to run simulations in parallel
-    try:
-        with ProcessPoolExecutor(max_workers=num_processes) as executor:
-            futures = []
-            for index, individual in enumerate(population.individuals):
-                headless = True
-                futures.append(executor.submit(simulate_individual, individual, index, len(population.individuals), epoch, num_epochs, num_trials, headless, mode, recurrent))
-            
-            epoch_data = []
-            for future in concurrent.futures.as_completed(futures):
-                output = future.result()
-                # print(output)
-                epoch_data.append(output)
-            return epoch_data
-    except KeyboardInterrupt:
-        print("Simulation interrupted by user.")
-        sys.exit()
-
-def breeding_program(population, reproduction_rate, epoch, num_epochs, recurrent):
-    mutation_strength = 0.2 - (0.18 * (epoch / num_epochs))
-    new_individuals = []
-    for individual in population.individuals:
-        for _ in range(reproduction_rate):
-            progeny = Evolution.reproduction(individual, mutation_strength)
-            new_individuals.append(progeny)
-    new_population = Population(len(new_individuals), population.individuals[0].architecture, recurrent, individuals=new_individuals)
-    return new_population
-
-def evolutionary_system(environment, population, selection, selector, progeny, epoch, num_epochs, num_trials, processes, headless, mode, architecture, recurrent):
-    if mode == 'new' or epoch > 0:
-        epoch_data = []
-        if headless:
-            output_data = parallel_simulations(population, epoch, num_epochs, num_trials, processes, mode, recurrent)
-            epoch_data.extend(output_data)
-
-        if not headless:
-            for i, individual in enumerate(population.individuals):
-                output_data = simulate_individual(individual, i, len(population.individuals), epoch, num_epochs, num_trials, headless, mode, environment, recurrent)
-                epoch_data.append(output_data)
-
-        # Update the epoch data with the full mutation history
-        for data in epoch_data:
-            individual_name = data['name']
-            individual = next((ind for ind in population.individuals if ind.name == individual_name), None)
-            if individual:
-                data['heritage'] = individual.mutation_history
-
-        Paperwork.epoch_csv(epoch_data, epoch, architecture)
-
-        selected_individuals, rankings = selector.select(population, selection)
-
-        survivors = Population(selection, population.individuals[0].architecture, recurrent, individuals=selected_individuals)
-
-    elif mode == 'continue':
-        survivors = population
-
-    new_population = breeding_program(survivors, progeny, epoch, num_epochs, recurrent)
-
-    return new_population
+import csv
+from ulid import ulid as ULID
+import time
+import matplotlib.pyplot as plt
+import numpy as np
 
 def main():
+    # Select network and method types
+    network_type = 'recurrent'
+    method_type = 'actor_critic'
+    epochs = 1000
 
-    # Whether to initialise a new population ('new') or continue from a previous run ('continue')
-    # There is some sort of problem with continue, where fitness degrades significantly
-    mode = 'new'
+    # Load default configurations
+    network_params = CONFIG['network'][network_type].copy()
+    method_params = CONFIG['method'][method_type].copy()
+    simulation_params = CONFIG['simulation'].copy()
+    training_params = CONFIG['training'].copy()
 
-    # Set headless to True to run without visualisation
-    headless = True
+    # Override parameters if needed
+    network_params.update({
+        # Add other network parameter overrides here
+    })
 
-    # Set number of processes to run in parallel
-    processes = 20
+    method_params.update({
+        # Add other method parameter overrides here
+    })
+
+    simulation_params.update({
+        # 'headless': True,
+        # 'processes': 2,
+        # Add other simulation parameter overrides here
+    })
+
+    # Create Environment
+    pygame.init()
+    screen = pygame.display.set_mode(simulation_params['screen_size'], pygame.DOUBLEBUF | pygame.HWSURFACE)
+    clock = pygame.time.Clock()
+    environment = screen, clock
+
+    # Create Handler
+    handler = Handler(network_type, network_params, method_type, method_params)
+
+    # Load previous network state if specified
+    if training_params['mode'] == 'load':
+        load_path = training_params['load_file']
+        if os.path.exists(load_path):
+            handler.load(load_path)
+            print(f"Loaded previous network state from {load_path}")
+        else:
+            print(f"Warning: Specified load file {load_path} not found. Starting with a new network.")
+
+    # Ensure save_path is valid
+    save_path = os.path.join(os.getcwd(), training_params['save_file'])
+
+    # Create FitnessTracker
+    fitness_tracker = FitnessTracker()
+
+    # Create and run Simulation
+    for epoch_n in range(epochs):
+        config = SimulationConfig(epoch_n)
+        
+        # Merge simulation_params into config
+        for key, value in simulation_params.items():
+            setattr(config, key, value)
+        
+        simulation = Simulation(config, handler)
+        results = simulation.run(headless=simulation_params['headless'], environment=environment)
+
+        # Calculate fitness (you might need to adjust this based on your specific fitness criteria)
+        fitness = calculate_fitness(results)
+
+        # Record fitness
+        fitness_tracker.record_fitness(epoch_n, fitness)
+
+        # Process results
+        print(f"Epoch {epoch_n + 1}/{epochs}: Fitness = {fitness}")
+
+        # Save network state after each epoch
+        handler.save(save_path)
+        print(f"Saved network state to {save_path}")
+
+    # Plot fitness at the end of the run
+    fitness_tracker.plot_fitness()
+
+    print("Training completed.")
+
+
+
+
+
+
+
+def calculate_fitness(results):
+    final_pos = np.array(results['final_position'])
+    emitter_pos = np.array(results['emitter_position'])
     
-    # If multiple processes are used, run headless
-    if processes > 1:
-        headless = True
-    else:
-        headless = False
-
-    # Set number of generations
-    num_epochs = 40
-
-    # Set number of trials for each individual within a generation 
-    num_trials = 4
-
-    # Set initial population size
-    population_size = 200
-
-    # Set subsequent population dynamics
-    selection = 8
-    progeny = 25
-
-    # Set architecture: input and output must be 12 and 3 respectively
-    architecture = [14,100,200,300,200,100,40,3]
-
-    # Set recurrence
-    recurrent = True
-
-    # Set selection type
-    selection_type = 'combined'
-    additional_trials = False
-
-    # Setup population, simulation, and selection
-    population = Population(population_size, architecture, recurrent)
+    # Calculate non-normalized distance
+    distance = np.linalg.norm(final_pos - emitter_pos)
     
-    simulation_settings = {
-        'wind_config': 'constant',
-        'neuron_type': 'izhikevich',
-        'headless': headless,
-        'recurrent': recurrent
-    }
-
-    selector = Selection(selection_type, additional_trials, simulation_settings=simulation_settings)
-
-    # Setup simulation
-    if not headless:
-        pygame.init()
-        screen = pygame.display.set_mode((1200, 800), pygame.DOUBLEBUF | pygame.HWSURFACE)
-        clock = pygame.time.Clock()
-
-        environment = screen, clock
+    if results['collided']:
+        print(f'Collision: {distance}')
+        return 0  # Minimum distance (best fitness) when collision occurs
     else:
-        environment = None
+        print(f'No collision: {distance}')
+        return distance  # Return the non-normalized Euclidean distance
 
-    # Setup paperwork
-    Paperwork.move_existing_files()
-
-    # Run
-    for epoch in tqdm(range(num_epochs), desc="Epochs"):
-        print(f"EPOCH {epoch+1}/{num_epochs}")
-        if mode == 'new':
-            if epoch == 0:
-                n_selection = selection * 2
-            else:
-                n_selection = selection
-        population = evolutionary_system(environment, population, n_selection, selector, progeny, epoch, num_epochs, num_trials, processes, headless, mode, architecture, recurrent)
+class FitnessTracker:
+    def __init__(self):
+        self.run_id = str(ULID())
+        self.csv_path = f"./records/fd_at_{time.strftime('%Y-%m-%d_%H-%M')}_{self.run_id}.csv"
+        self.fitness_data = []
+        
+        with open(self.csv_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(["Epoch", "Fitness"])
+    
+    def record_fitness(self, epoch, fitness):
+        self.fitness_data.append((epoch, fitness))
+        with open(self.csv_path, 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([epoch, fitness])
+    
+    def plot_fitness(self, window_size=10):
+        epochs, fitness = zip(*self.fitness_data)
+        
+        # Apply windowed smoothing
+        smoothed_fitness = np.convolve(fitness, np.ones(window_size)/window_size, mode='valid')
+        smoothed_epochs = epochs[window_size-1:]
+        
+        plt.figure(figsize=(12, 6))
+        plt.plot(epochs, fitness, label='Raw Fitness', alpha=0.5)
+        plt.plot(smoothed_epochs, smoothed_fitness, label=f'Smoothed Fitness (window={window_size})')
+        plt.xlabel('Epoch')
+        plt.ylabel('Fitness')
+        plt.title(f'Fitness over Training Run {self.run_id}')
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(f"fitness_plot_{self.run_id}.png")
+        plt.close()
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()

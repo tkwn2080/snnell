@@ -212,10 +212,10 @@ class Network:
         return output_spikes
 
     def process_output_spikes(self, output_spike_buffer):
-        # Approach 1: Set output spikes to a maximum of one
+        # A: Set output spikes to a maximum of one
         # output_spikes = mx.max(mx.stack(output_spike_buffer), axis=0)
         
-        # Approach 2: Accumulate output spikes as discrete integers
+        # B:Accumulate output spikes as discrete integers
         output_spikes = mx.sum(mx.stack(output_spike_buffer), axis=0)
         # print(f'Summed output spikes: {output_spikes}')
         
