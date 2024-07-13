@@ -12,6 +12,7 @@ def get_antennae_state(entity, environment):
 
     spikes = mx.zeros(6, dtype=mx.float32)
     spikes[:4] = convert_wind(wind, angle)
+
     head_receptor_spike1, head_receptor_spike2 = get_heading(wind, angle)
     spikes[4] = head_receptor_spike1
     spikes[5] = head_receptor_spike2
@@ -20,20 +21,18 @@ def get_antennae_state(entity, environment):
 
 def convert_wind(wind, entity_angle):
     antenna_angles = mx.array([55, -55, 125, -125]) * (mx.pi / 180)
-    deformation_coefficient = 0.01
-    conversion_factor = 1.0
 
-    wind_direction, wind_speed = wind.direction, wind.speed
-    wind_vector = mx.array([mx.cos(wind_direction), mx.sin(wind_direction)]) * wind_speed
+    wind_vector = mx.array([mx.cos(wind.direction), mx.sin(wind.direction)]) * wind.speed
 
     antenna_vectors = mx.array([
         [mx.cos(entity_angle + angle), mx.sin(entity_angle + angle)]
         for angle in antenna_angles
     ])
 
-    perpendicular_forces = mx.tensordot(wind_vector, antenna_vectors, axes=[[0], [1]])
-    deformations = perpendicular_forces * deformation_coefficient
-    membrane_potentials = deformations * conversion_factor
+    perpendicular_forces = mx.sum(wind_vector * antenna_vectors, axis=1)
+
+    deformations = perpendicular_forces * 0.01
+    membrane_potentials = deformations * 1.0
 
     min_potential = mx.min(membrane_potentials)
     max_potential = mx.max(membrane_potentials)

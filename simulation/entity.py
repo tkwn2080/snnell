@@ -6,159 +6,146 @@ from simulation.body import Body
 from simulation.receptors import collect_state
 
 class Entity:
-    def __init__(self):
-        # Entity parameters
-        self.config = EntityConfig()
+    def __init__(self, handler, network, trial_number):
+        self.trial_number = trial_number
+        self.config = EntityConfig(self.trial_number)
         self.x = self.config.initial_x
         self.y = self.config.initial_y
         self.angle = self.config.initial_angle
         self.speed = self.config.speed
-        self.turn_angle = np.radians(self.config.turn_angle)
-
-        # Network parameters
-        self.handler = None
-
-        # Target location
-        self.target = [self.config.target_x, self.config.target_y]
-
-        # Create a Body
+        self.turn_angle = self.config.turn_angle
+        self.max_speed = self.config.max_speed
+        self.max_turn_rate = np.radians(self.config.turn_angle)
+        
+        self.handler = handler
+        self.network = network
+        self.action_type = self.handler.action_type
+        
+        self.target = [self.config.target_x, self.config.target_y - 500]  # Adjusted for y-offset
+        
         self.body = Body()
         self.body.update(self.x, self.y, self.angle)
+        
+        self.delay = self.config.delay
+        self.previous_distance = self.calculate_distance_to_source()
+        self.previous_angle = self.angle
 
-        # Starting delay
-        self.delay = 300
+        self.concentration = []
 
-        # Tracking for reward calculation
-        self.closest_distance = float('inf')
-        self.last_distance = float('inf')
-        self.last_position = (self.x, self.y)
-        self.last_concentration = 0
-        self.highest_concentration = 0
-        self.plume_following_score = 0
-        self.static_count = 0
-        self.time_step = 0
-        self.time_penalty_factor = 0.01
+    def e_update(self, environment):
+        if self.delay > 0:
+            self.delay -= 1
+            return
+        
+        current_state = collect_state(self, environment)
 
-    def update(self, environment):
+        self.concentration = current_state[-4:] # Collect concentration for fitness calculation
+
+        input_current = self.handler.input_encoding(current_state)
+        action = self.handler.get_action(self.network, input_current)
+        self.execute_action(action)
+        return self.get_position()
+
+    def l_update(self, environment):
         if self.delay > 0:
             self.delay -= 1
             return
 
-        # Collect state from environment
+        stored_environment = environment
+
         current_state = collect_state(self, environment)
-        
-        # Get action from handler
+
         action = self.handler.get_action(current_state)
 
-        # Execute action
         self.execute_action(action)
 
-        # Get new state and calculate reward
-        new_state = collect_state(self, environment)
-        reward = self.calculate_reward(new_state, environment)
+        new_state = collect_state(self, stored_environment)
 
-        # Update the handler
+        reward = self.calculate_reward(new_state)
+
         self.handler.update(reward, new_state, done=False)
-
-        self.time_step += 1
 
         return self.get_position()
 
     def execute_action(self, action):
-        if action == 0:  # Turn left
-            self.turn(-self.turn_angle)
-        elif action == 1:  # Turn right
-            self.turn(self.turn_angle)
-        elif action == 2:  # Move forward
-            self.move_forward(self.speed)
-        else:  # Stay still
-            pass
+        # print(f'Action: {action}')
+        if self.action_type == 'discrete':
+            if action == 0:  # Turn left
+                self.turn(-self.max_turn_rate)
+            elif action == 1:  # Turn right
+                self.turn(self.max_turn_rate)
+            elif action == 2:  # Move forward
+                self.move_forward(self.speed)
+        elif self.action_type == 'continuous':
+            if self.network.network_type == 'spiking':
+                left, straight, right = action
+                turn = np.clip(left - right, -self.max_turn_rate, self.max_turn_rate)
+                self.turn(turn * self.turn_angle)
+                self.move_forward(straight * self.speed)
+            else:
+                movement, rotation = action
+
+                # Bound the movement to prevent backwards motion
+                movement = max(0, min(movement, 1))  # Clamp between 0 and 1
+                
+                # Limit the rotation to prevent sharp turns
+                max_rotation = np.pi / 4  # 45 degrees
+                rotation = max(-max_rotation, min(rotation, max_rotation))
+
+                self.move_forward(movement * self.max_speed)
+                self.turn(rotation)
 
         self.body.update(self.x, self.y, self.angle)
 
-    def turn(self, angle):
-        self.angle += angle
-        self.angle %= 2 * np.pi  # Keep angle between 0 and 2π
-
     def move_forward(self, distance):
-        dx = np.cos(self.angle) * distance
-        dy = np.sin(self.angle) * distance
-        self.x += dx
-        self.y += dy
+        self.x += np.cos(self.angle) * distance
+        self.y += np.sin(self.angle) * distance
 
-    def get_position(self):
-        return self.x, self.y, self.angle
+    def turn(self, angle):
+        self.angle = (self.angle + angle) % (2 * np.pi)
 
     def get_state(self, environment):
         return collect_state(self, environment)
 
+    def get_position(self):
+        return self.x, self.y, self.angle
+
+    def get_concentration(self):
+        return self.concentration
+
     def draw(self, screen):
         self.body.draw(screen, self.x, self.y, self.angle)
 
-    def calculate_reward(self, state, environment):
+    def calculate_reward(self, state):
         current_position = (self.x, self.y)
-        current_distance = self.calculate_distance_to_source()
-        current_concentration = self.get_current_concentration(state)
+        current_concentration = mx.max(state[-4:]).item()
+        current_distance = self.calculate_distance_to_source(current_position)
+        
+        progress = self.previous_distance - current_distance
+        self.previous_distance = current_distance
 
-        # Initialize reward
+        rotation = abs(self.angle - self.previous_angle)
+        self.previous_angle = self.angle
+
         reward = 0
 
-        # Reward for getting closer to the source
-        if current_distance < self.closest_distance:
-            improvement = self.closest_distance - current_distance
-            reward += 5 * improvement  # Significant reward for new closest approach
-            self.closest_distance = current_distance
+        if current_distance < self.config.target_threshold:
+            reward += 100
+        
+        reward += progress * 10
+        reward += current_concentration * 5
 
-        # Reward for following the plume
-        plume_reward = self.calculate_plume_following_reward(current_concentration, current_distance)
-        reward += plume_reward
+        if rotation > np.pi/4:
+            reward -= 1
 
-        # Penalty for not moving
-        if current_position == self.last_position:
-            self.static_count += 1
-            reward -= 0.1 * self.static_count
-        else:
-            self.static_count = 0
+        if not (0 <= self.x <= self.config.environment_width and 0 <= self.y <= self.config.environment_height):
+            reward -= 5
 
-        # Apply time-based penalty
-        time_penalty = self.time_penalty_factor * self.time_step
-        reward -= time_penalty
+        return reward
 
-        # Update tracking variables
-        self.last_distance = current_distance
-        self.last_position = current_position
-        self.last_concentration = current_concentration
-
-        return np.clip(reward, -10, 20)
-
-    def get_current_concentration(self, state):
-        # Assuming the last 4 elements of the state are the cilia concentrations
-        return mx.sum(state[-4:]).item()
-
-    def calculate_plume_following_reward(self, current_concentration, current_distance):
-        concentration_change = current_concentration - self.last_concentration
-        distance_change = self.last_distance - current_distance
-
-        if concentration_change > 0:
-            # Reward for moving towards higher concentration
-            self.plume_following_score += 1
-            if current_concentration > self.highest_concentration:
-                self.highest_concentration = current_concentration
-                return 10  # Bonus for finding new highest concentration
-            return 5
-        elif concentration_change < 0 and distance_change > 0:
-            # Small reward for moving towards source even if concentration decreases
-            self.plume_following_score += 0.5
-            return 2
-        elif concentration_change < 0 and distance_change < 0:
-            # Penalty for moving away from source and losing concentration
-            self.plume_following_score -= 1
-            return -5
-        else:
-            # No change or other scenarios
-            return 0
-
-    def calculate_distance_to_source(self):
-        dx = self.x - self.target[0]
-        dy = self.y - self.target[1]
+    def calculate_distance_to_source(self, position=None):
+        if position is None:
+            position = (self.x, self.y)
+        dx = position[0] - self.target[0]
+        dy = position[1] - self.target[1]
         return np.sqrt(dx**2 + dy**2)

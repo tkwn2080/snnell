@@ -6,14 +6,18 @@ import pygame
 from simulation.environment import WindSystem, PuffSystem
 from simulation.sim_config import SimulationConfig
 from simulation.entity import Entity
-from handler import Handler
+
+# from methods.evolutionary.evolutionary_controller import Controller
+from methods.evolutionary.neat.neat_handler import NEATHandler
 
 class Simulation:
-    def __init__(self, config: SimulationConfig, handler: Handler):
-        self.config = config
+    def __init__(self, handler, network, trial_number):
+        self.config = SimulationConfig.get_instance()
         self.handler = handler
-        self.wind = WindSystem(config)
-        self.puffs = PuffSystem(config)
+        self.method = handler.method
+        
+        self.wind = WindSystem(self.config)
+        self.puffs = PuffSystem(self.config)
 
         self.current_time = 0
         self.collision = False
@@ -23,12 +27,15 @@ class Simulation:
         self.record_time = 2
         self.record_data = []
 
-        self.entity = Entity()
-        # self.entity.config.initial_x = np.random.uniform(50, 200)
-        # self.entity.config.initial_y = self.config.source_y + (450 if self.config.source_y < 0 else 350) + np.random.uniform(-50, 50)
-        # self.entity.config.initial_angle = np.random.uniform(0, 2 * np.pi)
+        self.trial_number = trial_number
+
+        self.entity = Entity(self.handler, network, self.trial_number)
+        self.entity_concentration = 0
+
+        self.target_x = self.entity.config.source_x
+        self.target_y = self.entity.config.source_y
         self.entity.handler = self.handler
-        self.entity.target = [self.config.source_x, self.config.source_y]
+        self.entity.target = [self.target_x, self.target_y]
 
         self.origin_x = self.entity.config.initial_x
         self.origin_y = self.entity.config.initial_y
@@ -48,33 +55,41 @@ class Simulation:
         
         # Handle environmental checks and updates
         self.check_collision()
+        self.check_stalled()
         self.environment_update()
 
         self.current_time += self.config.time_step
 
     def final_call(self, cause):
-        # Collect final state from environment
-        environment = {
-            'wind': self.wind,
-            'puffs': self.puffs.puffs
-        }
+        if self.handler.method == 'evolutionary':
+            pass
+        elif self.handler.method == 'learning':
+            print("Final call")
+            # Collect final state from environment
+            environment = {
+                'wind': self.wind,
+                'puffs': self.puffs.puffs
+            }
 
-        final_state = self.entity.get_state(environment)
+            final_state = self.entity.get_state(environment)
 
-        # Calculate final reward
-        final_reward = self.calculate_reward(self.collision, self.is_out_of_bounds)
+            # Calculate final reward
+            final_reward = self.calculate_reward(self.collision, self.is_out_of_bounds)
 
-        # Apply additional punishment based on termination cause
-        if cause == 'out_of_bounds':
-            final_reward -= 50  # Additional punishment for being out of bounds
-        elif cause == 'stalled':
-            final_reward -= 25  # Punishment for being stalled
+            # Apply additional punishment based on termination cause
+            if cause == 'out_of_bounds':
+                final_reward -= 50  # Additional punishment for being out of bounds
+            elif cause == 'stalled':
+                final_reward -= 25  # Punishment for being stalled
 
-        # Update the handler with the final state, reward, and done flag
-        self.handler.update(final_reward, final_state, done=True)
+            # Update the handler with the final state, reward, and done flag
+            self.handler.update(final_reward, final_state, done=True)
 
-        # Perform a final update on the entity (if needed)
-        self.entity.update(environment)
+            # Perform a final update on the entity (if needed)
+            if self.handler.method == 'evolutionary':
+                self.entity.e_update(environment)
+            elif self.handler.method == 'learning':
+                self.entity.l_update(environment)
 
     def calculate_reward(self, collision, is_out_of_bounds):
         if collision:
@@ -96,9 +111,12 @@ class Simulation:
 
         boundary_punishment = 0.5 * self.out_of_bounds_counter
 
-        self.handler.update_environment(environment, boundary_punishment)
-
-        self.entity.update(environment)
+        if self.handler.method == 'evolutionary':
+            self.handler.update_environment(environment)
+            self.entity.e_update(environment)
+        elif self.handler.method == 'learning':
+            self.handler.update_environment(environment, boundary_punishment)
+            self.entity.l_update(environment)
 
     def check_collision(self):
         entity_x, entity_y, _ = self.entity.get_position()
@@ -150,6 +168,7 @@ class Simulation:
                 pygame.display.flip()
 
             self.update()
+            self.entity_concentration += sum(self.entity.concentration)
 
             if self.out_of_bounds_counter >= self.max_out_of_bounds:
                 self.is_out_of_bounds = True
@@ -178,14 +197,20 @@ class Simulation:
             return False
 
     def get_results(self):
-        self.handler.done()
+        if self.handler.method == 'learning':
+            self.handler.done()
+
         return {
             'collided': self.collision,
             'collision_time': self.collision_time,
             'simulation_time': time.time() - self.start_time,
             'final_position': self.entity.get_position()[:2],
+            'final_angle': self.entity.get_position()[2],
+            'out_of_bounds': self.is_out_of_bounds,
+            'is_stalled': self.is_stalled,
             'emitter_position': (self.config.source_x, self.config.source_y),
             'behaviour_record': self.get_behaviour_record(),
+            'total_concentration': float(self.entity_concentration.item()),
         }
 
     def get_behaviour_record(self):
