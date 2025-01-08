@@ -156,6 +156,8 @@ class GenomeConverter:
         mask_connections = set(zip(*self.null_mask.nonzero()))
         if not weight_connections.issubset(mask_connections):
             logger.error("Some connections in weight matrix are not allowed by null mask")
+            logger.error(f"Weight matrix connections: {weight_connections}")
+            logger.error(f"Null mask connections: {mask_connections}")
             raise AssertionError("Some connections in weight matrix are not allowed by null mask")
 
     def print_network_structure(self):

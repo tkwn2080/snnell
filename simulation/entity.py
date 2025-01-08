@@ -6,9 +6,10 @@ from simulation.body import Body
 from simulation.receptors import collect_state
 
 class Entity:
-    def __init__(self, handler, network, trial_number):
+    def __init__(self, handler, network, trial_number, generation):
         self.trial_number = trial_number
-        self.config = EntityConfig(self.trial_number)
+        self.generation = generation
+        self.config = EntityConfig(self.trial_number, self.generation)
         self.x = self.config.initial_x
         self.y = self.config.initial_y
         self.angle = self.config.initial_angle

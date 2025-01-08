@@ -1,6 +1,8 @@
 import numpy as np
 import mlx.core as mx
 import time
+import os
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
 
 from simulation.environment import WindSystem, PuffSystem
@@ -11,7 +13,7 @@ from simulation.entity import Entity
 from methods.evolutionary.neat.neat_handler import NEATHandler
 
 class Simulation:
-    def __init__(self, handler, network, trial_number):
+    def __init__(self, handler, network, trial_number, generation):
         self.config = SimulationConfig.get_instance()
         self.handler = handler
         self.method = handler.method
@@ -27,9 +29,10 @@ class Simulation:
         self.record_time = 2
         self.record_data = []
 
+        self.generation = generation
         self.trial_number = trial_number
 
-        self.entity = Entity(self.handler, network, self.trial_number)
+        self.entity = Entity(self.handler, network, self.trial_number, self.generation)
         self.entity_concentration = 0
 
         self.target_x = self.entity.config.source_x

@@ -1,4 +1,6 @@
 import numpy as np
+import os
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
 
 from simulation.body_config import BodyConfig

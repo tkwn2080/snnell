@@ -5,7 +5,7 @@ import random
 import networkx as nx
 import logging
 
-from methods.evolutionary.neat.genome import Genome, InnovationTracker
+from methods.evolutionary.neat.genome import Genome, InnovationTracker, Connection
 
 logger = logging.getLogger(__name__)
 
@@ -145,9 +145,33 @@ class Reproduction:
         self.interspecies_mating_rate = reproduction_parameters["interspecies_mating_rate"]
         self.elitism_count = 2  # Number of top individuals to preserve in each species
 
+        self.stagnation_limit = 12
+
     def reproduce(self, population, species, fitness):
         new_population = []
-        
+
+        # Handle species stagnation
+        for species_id, members in species.items():
+            # Find the best fitness in the current species
+            current_best_fitness = min(fitness[genome.genome_id] for genome in members)
+            
+            # If species_max is unassigned, initialize it
+            if members[0].species_max is None:
+                for genome in members:
+                    genome.species_max = current_best_fitness
+                    genome.species_counter = 0
+            else:
+                # Check if the current set has a better maximum fitness
+                if current_best_fitness < members[0].species_max:
+                    # New best fitness found
+                    for genome in members:
+                        genome.species_max = current_best_fitness
+                        genome.species_counter = 0
+                else:
+                    # No improvement, increment stagnation counter
+                    for genome in members:
+                        genome.species_counter += 1
+
         # Step 1: Apply elitism and eliminate low-performing individuals
         species = self.elitism_and_elimination(species, fitness)
         
@@ -157,40 +181,36 @@ class Reproduction:
         
         # Step 3: Produce offspring for each species
         for species_id, offspring_count in species_offspring.items():
-            print(f'Species {species_id} has {len(species[species_id])} members')
-            print(f'Number of offspring for species {species_id}: {offspring_count}')
             species_members = species[species_id]
             
+            # Check for stagnation
+            if species_members[0].species_counter >= self.stagnation_limit:
+                # Only allow reproduction if the species is performing well
+                species_fitness = min(fitness[genome.genome_id] for genome in species_members)
+                if species_fitness >= 500:  # This threshold might need adjustment
+                    print(f"Species {species_id} is stagnant but performing well. Allowing reproduction.")
+                else:
+                    print(f"Species {species_id} is stagnant and underperforming. Preventing reproduction.")
+                    continue  # Skip to the next species
+
+            # Sort species members by fitness (lower is better)
+            sorted_members = sorted(species_members, key=lambda genome: fitness[genome.genome_id])
+            
             # Add elite members to new population
-            new_population.extend(species_members[:min(self.elitism_count, len(species_members))])
+            new_population.extend(sorted_members[:min(self.elitism_count, len(sorted_members))])
             
             # Produce remaining offspring
-            for _ in range(offspring_count - min(self.elitism_count, len(species_members))):
+            for _ in range(offspring_count - min(self.elitism_count, len(sorted_members))):
                 if np.random.rand() < self.interspecies_mating_rate:
                     child = self.interspecies_reproduction(population, species_members)
                 else:
                     child = self.intraspecies_reproduction(species_members)
                 new_population.append(child)
 
-        # Step 4: As necessary, make up for lost individuals by producing more offspring from the fittest species
-        print(f'Length of old population: {len(population)}')
-        print(f'Length of new population: {len(new_population)}')
-        if len(new_population) < len(population):
-            while len(new_population) < len(population):
-                total_adjusted_fitness = sum(self.compute_adjusted_fitness(members, fitness) for members in species.values())
-                
-                selection_value = random.uniform(0, total_adjusted_fitness)
-                cumulative_fitness = 0
-                selected_species = None
-                
-                for species_id, members in species.items():
-                    species_adjusted_fitness = self.compute_adjusted_fitness(members, fitness)
-                    cumulative_fitness += species_adjusted_fitness
-                    if cumulative_fitness > selection_value:
-                        selected_species = members
-                        break
-
-                new_population.append(self.intraspecies_reproduction(selected_species))
+        # Step 4: Make up for lost individuals by producing more offspring from the fittest species
+        while len(new_population) < len(population):
+            fittest_species = max(species.values(), key=lambda s: self.compute_adjusted_fitness(s, fitness))
+            new_population.append(self.intraspecies_reproduction(fittest_species))
         
         return new_population
 
@@ -200,8 +220,7 @@ class Reproduction:
             sorted_members = sorted(members, key=lambda genome: fitness[genome.genome_id])
             
             if len(sorted_members) == 1:
-                # Implement method to clone the only member
-                pass
+                species[species_id] = sorted_members
             else:
                 # Keep the top performers (elites) and eliminate the rest
                 keep_count = max(self.elitism_count, int(len(sorted_members) * (1 - self.elimination_rate)))
@@ -239,16 +258,8 @@ class Reproduction:
         
         return self.crossover(parent1, parent2)
 
-    def crossover(self, parent1, parent2):
+    def crossover(self, parent1, parent2): # This will need to be rewritten entirely
         logger.debug(f"Starting crossover between genomes {parent1.genome_id} and {parent2.genome_id}")
-        logger.debug(f"Parent 1 nodes: {[node['node_id'] for node in parent1.nodes]}")
-        logger.debug(f"Parent 2 nodes: {[node['node_id'] for node in parent2.nodes]}")
-
-        parent_1_enabled_connections = [conn for conn in parent1.connections if conn.enabled]
-        parent_2_enabled_connections = [conn for conn in parent2.connections if conn.enabled]
-
-        # print(f"Parent 1 has {len(parent_1_enabled_connections)} enabled connections")
-        # print(f"Parent 2 has {len(parent_2_enabled_connections)} enabled connections")
 
         # Determine which parent is more fit (lower fitness is better)
         if parent1.fitness < parent2.fitness:
@@ -256,64 +267,91 @@ class Reproduction:
         else:
             fit_parent, less_fit_parent = parent2, parent1
 
-        # print(f"More fit parent has {len(fit_parent.connections)} enabled connections")
-        # print(f"Less fit parent has {len(less_fit_parent.connections)} enabled connections")
+        print(f"More fit parent has {len(fit_parent.connections)} connections and {len(fit_parent.nodes)} nodes")
+        print(f"Less fit parent has {len(less_fit_parent.connections)} connections and {len(less_fit_parent.nodes)} nodes")
 
         # Create a new child genome
         child_connections = []
-        child_nodes = []
+        child_nodes = {}  # Use a dictionary to store nodes
 
-        # Collect matching innovation numbers
-        parent1_innovations = set(conn.innovation_id for conn in parent1.connections)
-        parent2_innovations = set(conn.innovation_id for conn in parent2.connections)
-        matching_innovations = parent1_innovations & parent2_innovations
+        # Sort connections by innovation ID
+        fit_parent_connections = sorted(fit_parent.connections, key=lambda conn: conn.innovation_id)
+        less_fit_parent_connections = sorted(less_fit_parent.connections, key=lambda conn: conn.innovation_id)
 
-        # print(f'Couple has {len(matching_innovations)} matching innovations')
-
-        # Iterate through the matching innovations and randomly select weights
-        for innovation_id in matching_innovations:
-            parent1_conn = next(conn for conn in parent1.connections if conn.innovation_id == innovation_id)
-            parent2_conn = next(conn for conn in parent2.connections if conn.innovation_id == innovation_id)
-
-            # Randomly select the connection from either parent
-            if random.random() < 0.5:
-                child_connections.append(parent1_conn)
+        # Find the last matching innovation
+        last_matching_innovation = 0
+        matching_innovations = 0
+        for fp_conn, lfp_conn in zip(fit_parent_connections, less_fit_parent_connections):
+            if fp_conn.innovation_id == lfp_conn.innovation_id:
+                last_matching_innovation = fp_conn.innovation_id
+                matching_innovations += 1
             else:
-                child_connections.append(parent2_conn)
+                break
+
+        print(f'Couple has {matching_innovations} matching innovations')
+
+        # Helper function to add a node to child_nodes
+        def add_node(node_id, parent):
+            if node_id not in child_nodes:
+                node = next((n for n in parent.nodes if n['node_id'] == node_id), None)
+                if node:
+                    child_nodes[node_id] = node.copy()  # Create a copy of the node
+
+        # Crossover up to the last matching innovation
+        for fp_conn in fit_parent_connections:
+            if fp_conn.innovation_id <= last_matching_innovation:
+                lfp_conn = next((conn for conn in less_fit_parent_connections if conn.innovation_id == fp_conn.innovation_id), None)
+                if lfp_conn and random.random() < 0.5:
+                    selected_conn = lfp_conn
+                    parent = less_fit_parent
+                else:
+                    selected_conn = fp_conn
+                    parent = fit_parent
+                
+                # Only add the connection if it's enabled
+                if selected_conn.enabled:
+                    child_connections.append(Connection(
+                        selected_conn.connection_id,
+                        selected_conn.in_node,
+                        selected_conn.out_node,
+                        selected_conn.weight,
+                        selected_conn.innovation_id,
+                        selected_conn.enabled
+                    ))
+                    add_node(selected_conn.in_node, parent)
+                    add_node(selected_conn.out_node, parent)
+            else:
+                # Add remaining connections from the fit parent, but only if they're enabled
+                if fp_conn.enabled:
+                    child_connections.append(Connection(
+                        fp_conn.connection_id,
+                        fp_conn.in_node,
+                        fp_conn.out_node,
+                        fp_conn.weight,
+                        fp_conn.innovation_id,
+                        fp_conn.enabled
+                    ))
+                    add_node(fp_conn.in_node, fit_parent)
+                    add_node(fp_conn.out_node, fit_parent)
 
         # print(f'Child now has {len(child_connections)} connections')
 
-        # Collect remaining connections from the fit parent
-        remaining_innovations = set(conn.innovation_id for conn in fit_parent.connections) - matching_innovations
-
-        # print(f'Remaining innovations: {len(remaining_innovations)}')
-        for innovation_id in remaining_innovations:
-            fit_parent_conn = next(conn for conn in fit_parent.connections if conn.innovation_id == innovation_id)
-            child_connections.append(fit_parent_conn)
-
-        # print(f'Child now has {len(child_connections)} connections')
-
-        # Collect nodes from the child connections
-        child_node_ids = set(conn.in_node for conn in child_connections) | set(conn.out_node for conn in child_connections)
-        for node_id in child_node_ids:
-            parent_node = next((node for node in parent1.nodes if node['node_id'] == node_id), None)
-            if parent_node is None:
-                parent_node = next((node for node in parent2.nodes if node['node_id'] == node_id), None)
-            child_nodes.append(parent_node)
+        # Convert child_nodes dictionary to a list
+        child_nodes_list = list(child_nodes.values())
 
         # Create a new child genome using the assembled connections and nodes
-        child_genome = [child_connections, child_nodes]
-        child = Genome(parent1.n_in, parent1.n_out, parent1.innovation_tracker, source=child_genome)
+        child = Genome(parent1.n_in, parent1.n_out, parent1.innovation_tracker, source=[child_connections, child_nodes_list, parent1.species_id, parent1.species_counter, parent1.species_max])
 
-        child_enabled_connections = [conn for conn in child.connections if conn.enabled]
-        # print(f"Child has {len(child_enabled_connections)} enabled connections")
+        # print(f"Child has {len(child.connections)} connections and {len(child.nodes)} nodes")
 
-        # Check for cycles
-        cycle = detect_cycle(child.connections)
-        if cycle:
-            print(f"Cycle detected in crossover: {' -> '.join(cycle)}")
+        # Check for cycles (if you have a detect_cycle function)
+        # cycle = detect_cycle(child.connections)
+        # if cycle:
+        #     print(f"Cycle detected in crossover: {' -> '.join(cycle)}")
 
-        logger.debug(f"Child nodes: {[node['node_id'] for node in child.nodes]}")
+        if len(child.nodes) < len(parent1.nodes) or len(child.nodes) < len(parent2.nodes):
+            print(f"Child has fewer nodes ({len(child.nodes)}) than parents ({len(parent1.nodes)} and {len(parent2.nodes)})")
+
         return child
 
 class Mutation:
@@ -325,8 +363,7 @@ class Mutation:
 
     def mutate(self, genome):
         logger.debug(f"Starting mutation for genome {genome.genome_id}")
-        mutated_genome = Genome(genome.n_in, genome.n_out, genome.innovation_tracker, source=[genome.connections, genome.nodes])
-        self.weight_mutation(mutated_genome)
+        mutated_genome = Genome(genome.n_in, genome.n_out, genome.innovation_tracker, source=[genome.connections, genome.nodes, genome.species_id, genome.species_counter, genome.species_max])
         if np.random.rand() < self.connection_mutation_rate:
             # print("Attempting connection mutation")
             logger.debug("Attempting connection mutation")
@@ -334,6 +371,7 @@ class Mutation:
         if np.random.rand() < self.node_mutation_rate:
             logger.debug("Attempting node mutation")
             self.node_mutation(mutated_genome)
+        self.weight_mutation(mutated_genome) # Should this be before or after the node/connection mutations?
 
         cycle = detect_cycle(mutated_genome.connections)
         if cycle:

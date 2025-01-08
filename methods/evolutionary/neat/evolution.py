@@ -42,7 +42,10 @@ class Evolution:
                                               self.best_genome_generation.n_out, 
                                               self.best_genome_generation.innovation_tracker, 
                                               source=[self.best_genome_generation.connections, 
-                                                      self.best_genome_generation.nodes])
+                                                      self.best_genome_generation.nodes, 
+                                                      self.best_genome_generation.species_id,
+                                                      self.best_genome_generation.species_counter,
+                                                      self.best_genome_generation.species_max])
 
         # Speciate
         species = self.speciation.speciate(self.population.genomes)

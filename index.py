@@ -1,6 +1,9 @@
-import os
+import caffeine
+
 import multiprocessing
 import pygame
+import os
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 from config import CONFIG
 
 from handler import Handler
@@ -32,8 +35,8 @@ def main():
     })
 
     sim_params.update({
-        # 'headless': True,
-        # 'processes': 2,
+        # 'headless': False,
+        # 'processes': 1,
         # Add other simulation parameter overrides here
     })
 

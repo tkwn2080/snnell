@@ -30,7 +30,6 @@ class Genome:
         self.genome_id = str(ULID())
 
         if not source:
-            self.species_id = None
             self.n_in = n_in
             self.n_out = n_out
             self.innovation_tracker = innovation_tracker
@@ -38,6 +37,10 @@ class Genome:
 
             self.nodes = []
             self.connections = []
+
+            self.species_id = None
+            self.species_counter = 0
+            self.species_max = None
 
             # Initialize input and output nodes
             self.input_nodes = [self.add_node(initial_ids[i], 'input') for i in range(n_in)]
@@ -54,7 +57,6 @@ class Genome:
                     innovation_number += 1
 
         elif source:
-            self.species_id = None
             self.n_in = n_in
             self.n_out = n_out
             self.innovation_tracker = innovation_tracker
@@ -64,6 +66,10 @@ class Genome:
                                            conn.weight, conn.innovation_id, conn.enabled)
                                 for conn in source[0]]
             self.nodes = source[1]
+
+            self.species_id = source[2]
+            self.species_counter = source[2]
+            self.species_max = source[3]
 
     def add_node(self, node_id, node_type, model="spiking_izhikevich"):
         logger.debug(f"Adding node {node_id} of type {node_type} to genome {self.genome_id}")

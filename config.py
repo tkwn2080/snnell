@@ -34,11 +34,11 @@ CONFIG = {
         'NEAT': {
             'population_size': 150,
             'n_generations': 100,
-            'n_trials': 4,
+            'n_trials': 8,
             'NEAT_parameters': {
                 "speciation": {
-                "c_one": 1.1,
-                "c_two": 1.1,
+                "c_one": 1.0,
+                "c_two": 1.0,
                 "c_three": 0.5,
                 "compatibility_threshold": 1.4,
                 },
@@ -91,11 +91,11 @@ CONFIG = {
         },
     },
     'simulation': {
-        'headless': True,
-        'processes': 10,
+        'headless': False,
+        'processes': 1,
         'max_steps': 100,
         'screen_size': (1400, 1000),
         'visualize_best': True,
-        'n_best_genomes': 3
+        'n_best_genomes': 2
     }
 }
